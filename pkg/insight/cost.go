@@ -88,7 +88,9 @@ func analyze(db *gorm.DB, projectID uint) (*costAnalysis, error) {
 	}
 	keep := componentDirFilter(db, projectID)
 	if keep != nil {
-		kept := graphs[:0]
+		// Salinan baru: graphs adalah hasil cache routemap.Analyze — menyaring di tempat menimpa cache itu dan
+		// membuat modul yang lolos terhitung ganda pada pemanggilan berikutnya.
+		kept := make([]*routemap.Graph, 0, len(graphs))
 		for _, g := range graphs {
 			if keep(filepath.Join(root, filepath.FromSlash(g.Dir))) {
 				kept = append(kept, g)

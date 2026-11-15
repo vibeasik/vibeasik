@@ -50,12 +50,17 @@ func h(c *fiber.Ctx) error {
 	}
 	write("backend/go.mod", "module backend\n\ngo 1.22\n")
 	write("backend/main.go", app("new"))
+	write("archive/go.mod", "module archive\n\ngo 1.22\n") // modul tak terdaftar yang urut sebelum komponen
+	write("archive/main.go", app("archive"))
 	write("legacy/api/go.mod", "module legacyapi\n\ngo 1.22\n")
 	write("legacy/api/main.go", app("old"))
 
 	proj := models.Project{Name: "P", RootPath: root}
 	db.Create(&proj)
 	db.Create(&models.Component{ProjectID: proj.ID, Name: "BE", Role: "backend", AbsolutePath: filepath.Join(root, "backend")})
+	write("worker/go.mod", "module worker\n\ngo 1.22\n")
+	write("worker/main.go", app("worker"))
+	db.Create(&models.Component{ProjectID: proj.ID, Name: "Worker", Role: "backend", AbsolutePath: filepath.Join(root, "worker")})
 
 	page, err := ProcessCost(db, proj.ID, CostQuery{}, time.Now())
 	if err != nil {
@@ -72,5 +77,13 @@ func h(c *fiber.Ctx) error {
 	}
 	if !found {
 		t.Fatalf("rute komponen terdaftar hilang: %+v", page.Routes)
+	}
+	// Menghitung ulang tidak boleh menggandakan modul (dulu saringan komponen menimpa hasil analisis ber-cache).
+	again, err := ProcessCost(db, proj.ID, CostQuery{}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Summary.Funcs != page.Summary.Funcs || again.Handling.Sources != page.Handling.Sources {
+		t.Fatalf("hitungan kedua berbeda: fungsi %d → %d, sumber biaya %d → %d", page.Summary.Funcs, again.Summary.Funcs, page.Handling.Sources, again.Handling.Sources)
 	}
 }
