@@ -363,6 +363,7 @@ func codeMapLoad(s *Server, pid uint, limit int) (*ToolCallResult, error) {
 	}
 	b.WriteString("EKSPERIMENTAL — cara perhitungan terbaik masih dianalisis; ini hanya perhitungan kasar, bukan dasar keputusan kapasitas.\n")
 	fmt.Fprintf(&b, "Proyeksi beban %d rute (porsi trafik: %s; %d rute tidak bisa diperkirakan dari kode saja)\n", res.TotalRoutes, res.Mix, res.LooseRoutes)
+	fmt.Fprintf(&b, "Kalibrasi: %s\n", res.Calibration.Note)
 	fmt.Fprintf(&b, "Lapisan fungsi (pemicu): %v\nLapisan guna (arti n per rute): %v\nLapisan pemakaian (operasi): %v\n", res.FuncTriggers, res.RouteScales, res.RouteOps)
 	b.WriteString("\nKapasitas satu server (pengguna aktif) per ukuran data:\n")
 	for _, l := range res.Limits {

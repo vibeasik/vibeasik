@@ -34,7 +34,7 @@ func (s *Server) getProcessCostProjection(c *fiber.Ctx) error {
 	}
 	p := insight.LoadParams{
 		Users: insight.ParseScenarioList(c.Query("users")), Rows: insight.ParseScenarioList(c.Query("rows")),
-		ReqPerUserMin: c.QueryFloat("req_per_user_min"), SmallItems: c.QueryFloat("small_items"), TickNs: c.QueryFloat("tick_ns"),
+		ReqPerUserMin: c.QueryFloat("req_per_user_min"), SmallItems: c.QueryFloat("small_items"), BaseMs: c.QueryFloat("base_ms"), TickNs: c.QueryFloat("tick_ns"),
 		QueryMs: c.QueryFloat("query_ms"), RowUs: c.QueryFloat("row_us"), Cores: c.QueryFloat("cores"), DBConns: c.QueryFloat("db_conns"),
 		BudgetMs: c.QueryFloat("budget_ms"), TimeoutMs: c.QueryFloat("timeout_ms"),
 	}

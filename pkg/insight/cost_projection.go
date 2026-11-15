@@ -32,6 +32,7 @@ type LoadParams struct {
 	Rows          []int64 `json:"rows"`             // skenario jumlah baris data tersimpan
 	ReqPerUserMin float64 `json:"req_per_user_min"` // permintaan per pengguna aktif per menit
 	SmallItems    float64 `json:"small_items"`      // ukuran koleksi selain baris data (halaman, isi permintaan, memori)
+	BaseMs        float64 `json:"base_ms"`          // ongkos dasar per permintaan (router, middleware, serialisasi)
 	TickNs        float64 `json:"tick_ns"`          // harga satu tick (nanodetik CPU)
 	QueryMs       float64 `json:"query_ms"`         // harga satu query berindeks (milidetik)
 	RowUs         float64 `json:"row_us"`           // harga membaca & mengirim satu baris data (mikrodetik)
@@ -55,6 +56,7 @@ func (p LoadParams) withDefaults() LoadParams {
 	}
 	def(&p.ReqPerUserMin, 6)
 	def(&p.SmallItems, 20)
+	def(&p.BaseMs, 0.5)
 	def(&p.TickNs, 50)
 	def(&p.QueryMs, 2)
 	def(&p.RowUs, 2)
@@ -170,8 +172,10 @@ type LoadProjection struct {
 	Supported bool       `json:"supported"`
 	Params    LoadParams `json:"params"`
 	// Mix: assumed = porsi trafik dibagi menurut jenis operasi; traffic = dari data trafik nyata proyek.
-	Mix          string         `json:"mix"`
-	MixRequests  int64          `json:"mix_requests,omitempty"`
+	Mix         string `json:"mix"`
+	MixRequests int64  `json:"mix_requests,omitempty"`
+	// Calibration: pencocokan harga tick/query dengan latensi terukur, dan apakah hasilnya dipakai.
+	Calibration  Calibration    `json:"calibration"`
 	Scenarios    []LoadScenario `json:"scenarios"`
 	Limits       []LoadLimit    `json:"limits"`
 	Routes       []RouteLoad    `json:"routes"`
@@ -199,7 +203,7 @@ var opWeights = map[string]float64{
 // point: biaya satu permintaan rute pada `rows` baris data.
 func (p LoadParams) point(c routemap.Cost, rows int64) LoadPoint {
 	ticks, queries := c.Estimate(float64(rows), p.SmallItems)
-	pt := LoadPoint{Rows: rows, Queries: queries, CPUMs: ticks * p.TickNs / 1e6, DBMs: queries * p.QueryMs}
+	pt := LoadPoint{Rows: rows, Queries: queries, CPUMs: p.BaseMs + ticks*p.TickNs/1e6, DBMs: queries * p.QueryMs}
 	switch c.Scale {
 	case routemap.ScaleData: // membaca & mengirim baris yang ikut tumbuh bersama data
 		pt.DBMs += float64(rows) * p.RowUs / 1e3
@@ -348,18 +352,54 @@ func ProjectLoad(db *gorm.DB, projectID uint, p LoadParams, limit int) (*LoadPro
 	if err != nil {
 		return nil, err
 	}
-	return buildProjection(a.rep, p, loadTrafficMix(db, projectID), limit), nil
+	mix := loadTrafficMix(db, projectID)
+	var measured *measuredLatency
+	if mix != nil {
+		measured = &measuredLatency{source: "traffic", ms: mix.avgMs}
+	} else {
+		measured = loadDeepCheckLatency(db, projectID)
+	}
+	return buildProjection(a.rep, p, mix, measured, limit), nil
 }
 
-func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, limit int) *LoadProjection {
+func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, measured *measuredLatency, limit int) *LoadProjection {
+	asked := p // harga yang diisi pengguna tidak ditimpa kalibrasi
 	p = p.withDefaults()
+	cal := calibrate("", 0, nil)
+	if measured != nil {
+		var samples []calSample
+		hit := 0
+		for _, r := range rep.Routes {
+			ms := measured.ms[routeKey(r.Method, r.Path)]
+			if ms <= 0 {
+				continue
+			}
+			hit++
+			if r.DataDegree == 0 && !r.Loose {
+				t, q := r.Estimate(1, p.SmallItems)
+				samples = append(samples, calSample{ms: ms, ticks: t, queries: q})
+			}
+		}
+		cal = calibrate(measured.source, hit, samples)
+		if cal.Applied {
+			if asked.BaseMs <= 0 {
+				p.BaseMs = cal.BaseMs
+			}
+			if asked.QueryMs <= 0 && cal.QueryMs > 0 {
+				p.QueryMs = cal.QueryMs
+			}
+			if asked.TickNs <= 0 && cal.TickNs > 0 {
+				p.TickNs = cal.TickNs
+			}
+		}
+	}
 	if limit <= 0 {
 		limit = defaultLoadRoutes
 	}
 	limit = min(limit, maxLoadRoutes)
 	out := &LoadProjection{Supported: len(rep.Routes) > 0, Params: p, Mix: "assumed", Scenarios: []LoadScenario{}, Limits: []LoadLimit{},
 		Routes: []RouteLoad{}, TotalRoutes: len(rep.Routes), FuncTriggers: map[string]int{}, RouteScales: map[string]int{}, RouteOps: map[string]int{},
-		Startup: []StartupCost{}}
+		Startup: []StartupCost{}, Calibration: cal}
 
 	for _, f := range rep.Funcs {
 		trig := f.Trigger
@@ -399,8 +439,8 @@ func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, li
 		if r.Loose {
 			out.LooseRoutes++
 		}
-		if mix != nil {
-			rl.MeasuredMs = math.Round(mix.avgMs[routeKey(r.Method, r.Path)]*10) / 10
+		if measured != nil {
+			rl.MeasuredMs = math.Round(measured.ms[routeKey(r.Method, r.Path)]*100) / 100
 		}
 		for _, rows := range p.Rows {
 			rl.Points = append(rl.Points, p.point(r.Cost, rows))
@@ -476,7 +516,8 @@ func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, li
 	out.Assumptions = []string{
 		mixNote,
 		fmt.Sprintf("Tiap pengguna aktif mengirim %.3g permintaan per menit.", p.ReqPerUserMin),
-		fmt.Sprintf("Satu tick = %.3g ns CPU, satu query = %.3g ms, satu baris data terbaca = %.3g µs. Angka ini rata-rata kasar; kalibrasi dengan latensi nyata.", p.TickNs, p.QueryMs, p.RowUs),
+		fmt.Sprintf("Ongkos dasar per permintaan = %.3g ms, satu tick = %.3g ns CPU, satu query = %.3g ms, satu baris data terbaca = %.3g µs.", p.BaseMs, p.TickNs, p.QueryMs, p.RowUs),
+		"Kalibrasi: " + cal.Note,
 		fmt.Sprintf("Hanya tingkat loop yang memutari hasil query tanpa Limit yang dihitung sebanyak baris data; tingkat lain (satu halaman, isi permintaan, koleksi di memori) dihitung %.3g putaran, paling banyak dua tingkat. Rumus Big-O di tabel tetap kasus terburuk (semua tingkat n).", p.SmallItems),
 		fmt.Sprintf("%d rute punya lebih dari dua tingkat koleksi kecil bersarang (pangkat hasil perkalian lintas fungsi): perkiraannya tidak bisa dipercaya dari kode saja, jadi tidak dihitung ke beban & kapasitas. Ukur rute itu dengan trafik nyata.", out.LooseRoutes),
 		fmt.Sprintf("Kapasitas satu server: %.3g inti CPU dan %.3g koneksi database; permintaan diputus setelah %.3g detik, dianggap lambat di atas %.3g ms.", p.Cores, p.DBConns, p.TimeoutMs/1e3, p.BudgetMs),
