@@ -32,6 +32,8 @@ type Graph struct {
 	funcCosts map[string]Cost
 	// background: fungsi yang dijalankan di luar rute (worker, goroutine/job dari main/init), lihat backgroundReach.
 	background map[string]bool
+	// triggers: kapan fungsi dijalankan di luar rute (background / startup / tool), lihat cost_trigger.go.
+	triggers map[string]string
 	// loopCallees[fungsi][terpanggil]: pemanggilan di dalam loop atas data (lihat costCtx.inLoop).
 	loopCallees map[string]map[string]bool
 	routeCosts  map[*Route]RouteCost

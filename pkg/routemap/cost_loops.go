@@ -169,7 +169,12 @@ func chainLimit(e ast.Expr) int64 {
 
 // newFnScope menyiapkan cakupan biaya satu badan fungsi/handler.
 func newFnScope(m *module, fi *fileInfo, key string, body []ast.Stmt) *fnScope {
-	return &fnScope{m: m, fi: fi, key: key, closures: map[string]cst{}, limits: queryLimits(body), fixedVars: fixedLocals(body), exit: newCst()}
+	sc := &fnScope{m: m, fi: fi, key: key, closures: map[string]cst{}, limits: queryLimits(body), fixedVars: fixedLocals(body), exit: newCst()}
+	sc.defs, sc.fill = scopeVars(body)
+	if f := m.funcs[key]; f != nil {
+		sc.params = paramSet(f.Decl)
+	}
+	return sc
 }
 
 // textSplitFuncs: pemecah teks (strings.Split, regexp FindAll…) — banyak putarannya mengikuti panjang teks itu
@@ -177,6 +182,7 @@ func newFnScope(m *module, fi *fileInfo, key string, body []ast.Stmt) *fnScope {
 // data, sehingga fungsi string biasa (AssetURL) membuat setiap pemanggilnya di dalam loop tampak O(n²).
 var textSplitFuncs = map[string]bool{
 	"Split": true, "SplitN": true, "SplitAfter": true, "Fields": true, "FieldsFunc": true,
+	"SplitSeq": true, "SplitAfterSeq": true, "FieldsSeq": true, "FieldsFuncSeq": true, "Lines": true,
 	"FindAllString": true, "FindAllStringSubmatch": true, "FindAllStringIndex": true, "FindAllStringSubmatchIndex": true,
 }
 

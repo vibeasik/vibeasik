@@ -349,7 +349,7 @@ func (w *goEvidence) call(ce *ast.CallExpr, depth int) bool {
 			w.add(kind, ce, depth, note)
 			w.out[len(w.out)-1].Callee = callee
 		}
-		return true
+		return w.registered(ce, depth)
 	}
 	name := exprStr(ce.Fun)
 	sel, _ := ce.Fun.(*ast.SelectorExpr)
@@ -376,7 +376,24 @@ func (w *goEvidence) call(ce *ast.CallExpr, depth int) bool {
 	case sel != nil && ioCallKind(sel) != 0:
 		w.add(evidenceKindQuery, ce, depth, ioNote(ioCallKind(sel), depth))
 	}
-	return true
+	return w.registered(ce, depth)
+}
+
+// registered: aturan yang sama dengan costCtx.registeredArgs — callback yang hanya didaftarkan bukan bukti biaya
+// fungsi pendaftarnya.
+func (w *goEvidence) registered(ce *ast.CallExpr, depth int) bool {
+	if !registersCallback(ce) {
+		return true
+	}
+	for _, a := range ce.Args {
+		if _, ok := a.(*ast.FuncLit); !ok {
+			w.calls(a, depth)
+		}
+	}
+	if sel, ok := ce.Fun.(*ast.SelectorExpr); ok {
+		w.calls(sel.X, depth)
+	}
+	return false
 }
 
 func (w *goEvidence) callbacks(ce *ast.CallExpr, depth int) {

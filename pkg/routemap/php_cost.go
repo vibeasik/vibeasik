@@ -346,7 +346,8 @@ func (c *phpCostCtx) loop(sc *phpScope, s *phpStmt) cst {
 		iter.add(c.block(sc, s.Body))
 		k, data, unbounded = phpForBound(nil, s.Cond)
 	}
-	out.add(loopCost(iter, k, data))
+	// PHP belum melacak asal data: tiap loop atas data dianggap memutari baris data (kasus terburuk).
+	out.add(loopCost(iter, k, data, drvDB))
 	out.unbounded = out.unbounded || unbounded
 	return out
 }
@@ -976,14 +977,14 @@ func (c *phpCostCtx) chainCostDB(sc *phpScope, ch *phpChain) (cst, bool) {
 			cmp := newCst()
 			cmp.tick(1)
 			c.args(sc, seg.Args, &cmp, &out)
-			out.add(cmp.scaled(1, 1, 1))
+			out.add(cmp.scaledLoop(drvDB, 1))
 			continue
 		}
 		// 3) callback per elemen
 		if hasCB && ((op == "func" && phpIterFuncs[lname]) || (op != "func" && phpCollIter[lname])) {
 			body := newCst()
 			c.args(sc, seg.Args, &body, &out)
-			out.add(body.scaled(1, 1, 0))
+			out.add(body.scaledLoop(drvDB, 0))
 			if dbish && phpQueryTerminals[lname] {
 				out.queries.addTerm(term{}, 1)
 				dbish = false

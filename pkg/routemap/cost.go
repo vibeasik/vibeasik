@@ -22,9 +22,18 @@ import (
 //
 // n = jumlah data yang diproses. Semua koleksi dianggap berukuran n (kasus terburuk seragam), sehingga
 // rumusnya berbentuk T(n) = a·n² + b·n + c dan kelas pertumbuhannya (Big-O) adalah suku tertinggi.
+//
+// Rumus itu baru lapisan pertama (kode). Agar bisa diterjemahkan menjadi beban server, tiap biaya juga membawa:
+//   - pemicu (FuncCost.Trigger): per permintaan, di latar belakang, atau sekali saat proses dinyalakan;
+//   - arti n (Cost.Drivers/Scale): baris database tanpa batas, satu halaman, isi permintaan, berkas, memori;
+//   - Composed: pangkat hasil perkalian lintas fungsi (batas atas longgar), bukan loop bersarang di satu fungsi.
+//
+// Callback yang hanya DIDAFTARKAN (handler rute, job terjadwal) tidak dihitung sebagai biaya fungsi pendaftarnya.
 
-// term = n^N · (log n)^L.
-type term struct{ N, L int }
+// term = n^N · (log n)^L. Dari N tingkat loop itu, D tingkat memutari baris data (hasil query tanpa Limit) dan P
+// tingkat memutari parameter fungsi (ukurannya ditentukan pemanggil); sisanya koleksi kecil (halaman, isi
+// permintaan, memori). Big-O memakai N (kasus terburuk: semua koleksi berukuran n); proyeksi beban memakai D.
+type term struct{ N, L, D, P int }
 
 // poly = jumlah suku berkoefisien bulat.
 type poly map[term]int64
@@ -58,6 +67,8 @@ func (p poly) addTerm(t term, c int64) {
 	if t.N > maxCostDegree {
 		t.N = maxCostDegree
 	}
+	t.D = min(t.D, t.N)
+	t.P = min(t.P, t.N-t.D)
 	p[t] = satAdd(p[t], c)
 }
 
@@ -71,7 +82,55 @@ func (p poly) add(o poly) {
 func (p poly) times(k int64, dn, dl int) poly {
 	out := poly{}
 	for t, c := range p {
-		out.addTerm(term{t.N + dn, t.L + dl}, satMul(c, k))
+		out.addTerm(term{N: t.N + dn, L: t.L + dl, D: t.D, P: t.P}, satMul(c, k))
+	}
+	return out
+}
+
+// timesLoop = p × n·(log n)^dl untuk satu tingkat loop atas data yang asalnya drv.
+func (p poly) timesLoop(drv driver, dl int) poly {
+	out := poly{}
+	for t, c := range p {
+		nt := term{N: t.N + 1, L: t.L + dl, D: t.D, P: t.P}
+		switch {
+		case drv&drvDB != 0:
+			nt.D++
+		case drv&drvParam != 0:
+			nt.P++
+		}
+		out.addTerm(nt, c)
+	}
+	return out
+}
+
+// bindParams menyelesaikan tingkat loop atas parameter saat fungsi dipanggil: toData → pemanggil memberi baris
+// data (P menjadi D); selain itu parameter berisi koleksi kecil (P dibuang).
+func (p poly) bindParams(toData bool) poly {
+	out := poly{}
+	for t, c := range p {
+		if toData {
+			t.D += t.P
+		}
+		t.P = 0
+		out.addTerm(t, c)
+	}
+	return out
+}
+
+func (p poly) hasParamLevels() bool {
+	for t := range p {
+		if t.P > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// merged menjumlahkan suku yang sama pangkatnya (tanpa membedakan asal data) — bentuk rumus yang ditampilkan.
+func (p poly) merged() poly {
+	out := poly{}
+	for t, c := range p {
+		out.addTerm(term{N: t.N, L: t.L}, c)
 	}
 	return out
 }
@@ -138,6 +197,7 @@ func termString(t term) string {
 }
 
 func (p poly) String() string {
+	p = p.merged()
 	var parts []string
 	for _, t := range p.sorted() {
 		c, ts := p[t], termString(t)
@@ -192,6 +252,11 @@ type cst struct {
 	// kinds: jenis operasi I/O yang dijalankan (ioQuery, ioHTTP, …); loopKinds: yang dijalankan di dalam loop atas
 	// data (per item) — dasar label temuan "I/O per item".
 	kinds, loopKinds ioKind
+	// lex: kedalaman loop atas data yang DITULIS di badan fungsi ini sendiri (tanpa fungsi terpanggil). Pangkat
+	// yang lebih tinggi dari lex berasal dari perkalian lintas fungsi — tiap tingkat biasanya koleksi berbeda.
+	lex int
+	// drv: asal data yang diputari loop atas data (lihat cost_layers.go) — menentukan apa arti n.
+	drv driver
 }
 
 func newCst() cst { return cst{ticks: poly{}, queries: poly{}} }
@@ -207,18 +272,31 @@ func (c *cst) add(o cst) {
 	c.avoid = c.avoid || o.avoid
 	c.kinds |= o.kinds
 	c.loopKinds |= o.loopKinds
+	c.drv |= o.drv
 	if o.depth > c.depth {
 		c.depth = o.depth
+	}
+	if o.lex > c.lex {
+		c.lex = o.lex
 	}
 }
 
 // scaled = biaya dikalikan k·n^dn·(log n)^dl (isi loop).
 func (c cst) scaled(k int64, dn, dl int) cst {
 	out := cst{ticks: c.ticks.times(k, dn, dl), queries: c.queries.times(k, dn, dl), recursive: c.recursive, unbounded: c.unbounded, depth: c.depth,
-		search: c.search, avoid: c.avoid, kinds: c.kinds, loopKinds: c.loopKinds}
+		search: c.search, avoid: c.avoid, kinds: c.kinds, loopKinds: c.loopKinds, lex: c.lex, drv: c.drv}
 	if dn > 0 {
 		out.depth += dn
+		out.lex += dn
 	}
+	return out
+}
+
+// scaledLoop = isi satu tingkat loop atas data yang asalnya drv, dikalikan n·(log n)^dl.
+func (c cst) scaledLoop(drv driver, dl int) cst {
+	out := c.scaled(1, 1, dl)
+	out.ticks, out.queries = c.ticks.timesLoop(drv, dl), c.queries.timesLoop(drv, dl)
+	out.drv |= drv
 	return out
 }
 
@@ -236,8 +314,12 @@ func heavier(a, b cst) cst {
 	w.avoid = w.avoid || l.avoid
 	w.kinds |= l.kinds
 	w.loopKinds |= l.loopKinds
+	w.drv |= l.drv
 	if l.depth > w.depth {
 		w.depth = l.depth
+	}
+	if l.lex > w.lex {
+		w.lex = l.lex
 	}
 	return w
 }
@@ -291,6 +373,10 @@ type fnScope struct {
 	frames []*loopFrame
 	// fixedVars: variabel lokal berukuran tetap (literal / potongan teks), lihat fixedLocals.
 	fixedVars map[string]int64
+	// defs/fill/params: asal variabel lokal (lihat scopeVars) — menentukan apa yang diputari loop atas data.
+	defs   map[string]ast.Expr
+	fill   map[string]driver
+	params map[string]bool
 	// loops: kedalaman loop (semua jenis), dataLoops: kedalaman loop atas data. exit: biaya `return` di dalam
 	// loop — dijalankan paling banyak sekali, jadi ditambahkan sekali setelah loop terluar, tidak dikalikan.
 	loops, dataLoops int
@@ -363,7 +449,11 @@ func (c *costCtx) stmt(sc *fnScope, s ast.Stmt) cst {
 			return iter
 		})
 		sc.popFrame()
-		lc := loopCost(iter, k, data)
+		var drv driver
+		if data {
+			drv = c.forDriver(sc, x)
+		}
+		lc := loopCost(iter, k, data, drv)
 		lc.add(f.once)
 		out.add(c.afterLoop(sc, markSearch(lc, iter, data, x.Body)))
 		out.unbounded = out.unbounded || unbounded
@@ -381,7 +471,11 @@ func (c *costCtx) stmt(sc *fnScope, s ast.Stmt) cst {
 			return iter
 		})
 		sc.popFrame()
-		lc := loopCost(iter, k, data)
+		var drv driver
+		if data {
+			drv = c.exprDriver(sc, x.X, 0)
+		}
+		lc := loopCost(iter, k, data, drv)
 		lc.add(f.once)
 		out.add(c.afterLoop(sc, markSearch(lc, iter, data, x.Body)))
 	case *ast.ReturnStmt:
@@ -490,10 +584,10 @@ func (c *costCtx) clauses(sc *fnScope, body *ast.BlockStmt) cst {
 }
 
 // loopCost: k > 0 → loop batas tetap (k iterasi); data → loop atas data (n iterasi). Selalu +1 cek syarat penutup.
-func loopCost(iter cst, k int64, data bool) cst {
+func loopCost(iter cst, k int64, data bool, drv driver) cst {
 	var out cst
 	if data {
-		out = iter.scaled(1, 1, 0)
+		out = iter.scaledLoop(drv, 0)
 		out.loopKinds |= iter.kinds
 	} else {
 		out = iter.scaled(k, 0, 0)
@@ -594,8 +688,9 @@ func (c *costCtx) call(sc *fnScope, ce *ast.CallExpr, out *cst) bool {
 				c.noteLoopCall(sc, f.Key)
 			}
 		}
-		out.add(best)
-		return true
+		best.lex = 0 // loop milik fungsi terpanggil bukan loop yang ditulis di fungsi ini
+		out.add(c.bindParams(sc, ce, best))
+		return c.registeredArgs(sc, ce, out)
 	}
 	name := exprStr(ce.Fun)
 	sel, _ := ce.Fun.(*ast.SelectorExpr)
@@ -604,17 +699,18 @@ func (c *costCtx) call(sc *fnScope, ce *ast.CallExpr, out *cst) bool {
 		cmp := newCst()
 		cmp.tick(1)
 		c.callbackArgs(sc, ce, &cmp, out)
-		out.add(cmp.scaled(1, 1, 1))
+		out.add(cmp.scaledLoop(c.argsDriver(sc, ce), 1))
 		return false
 	case sel != nil && iterCallbackRe.MatchString(sel.Sel.Name) && hasFuncLit(ce):
 		body := newCst()
 		c.callbackArgs(sc, ce, &body, out)
-		out.add(body.scaled(1, 1, 0))
+		out.add(body.scaledLoop(c.argsDriver(sc, ce), 0))
 		out.add(c.expr(sc, sel.X))
 		return false
 	case sel != nil && isQueryCall(sel, len(ce.Args)):
 		out.queries.addTerm(term{}, 1)
 		out.kinds |= ioQuery
+		out.drv |= fetchDriver(sel)
 	case sel != nil:
 		// I/O di luar database (HTTP keluar, berkas, email, antrean/pubsub) dihitung seperti query: satu operasi
 		// I/O per pemanggilan, sehingga yang dijalankan per item di loop data dilaporkan sebagai I/O per item.
@@ -623,7 +719,7 @@ func (c *costCtx) call(sc *fnScope, ce *ast.CallExpr, out *cst) bool {
 			out.kinds |= k
 		}
 	}
-	return true
+	return c.registeredArgs(sc, ce, out)
 }
 
 // callbackArgs: func literal → cb (dikalikan pemanggil), argumen lain → out (sekali).
@@ -750,8 +846,65 @@ type Cost struct {
 	Avoidable bool `json:"avoidable,omitempty"`
 	// IOKinds: jenis I/O yang dijalankan per item di loop atas data (query, http, file, mail, queue, goroutine).
 	IOKinds []string `json:"io_kinds,omitempty"`
+	// OwnDepth: kedalaman loop atas data yang ditulis di badan fungsi ini sendiri. Composed: pangkat rumus lebih
+	// tinggi dari OwnDepth, jadi berasal dari perkalian lintas fungsi — batas atas longgar, karena tiap tingkat
+	// biasanya memutari koleksi yang berbeda ukurannya (bukan n yang sama).
+	OwnDepth int  `json:"own_depth"`
+	Composed bool `json:"composed,omitempty"`
+	// Drivers: asal data yang diputari (db, page, input, file, param, memory). Scale: arti n untuk proyeksi —
+	// data (tumbuh bersama baris tersimpan), page (dibatasi ukuran halaman), input (isi permintaan), file,
+	// memory (koleksi di memori / tidak diketahui), fixed (tidak ada loop atas data).
+	Drivers []string `json:"drivers,omitempty"`
+	Scale   string   `json:"scale"`
+	// DataDegree/DataBigO: pertumbuhan terhadap BARIS DATA saja — hanya tingkat loop yang memutari hasil query
+	// tanpa Limit. O(n⁴) dengan DataBigO O(n) berarti: data 10× → biaya ±10×, bukan 10.000×.
+	DataDegree int    `json:"data_degree"`
+	DataBigO   string `json:"data_big_o"`
+	// Loose: lebih dari dua tingkat koleksi kecil bersarang — perkiraan beban tidak bisa dipercaya dari kode saja.
+	Loose   bool `json:"loose,omitempty"`
 	rank    float64
 	qDegree int // pangkat n tertinggi pada Q(n)
+	// ticks/queries: polinomnya sendiri, untuk Estimate (proyeksi beban).
+	ticks, queries poly
+}
+
+// maxSmallLevels: paling banyak sekian tingkat koleksi kecil yang dikalikan pada perkiraan. Tingkat yang lebih
+// dalam hampir selalu hasil perkalian lintas fungsi atas koleksi yang berbeda (berkas → fungsi → pernyataan):
+// hasil kalinya bukan m pangkat sekian, jadi diabaikan dan biayanya ditandai Loose.
+const maxSmallLevels = 2
+
+// evalMixed menghitung polinom untuk n baris data dan koleksi kecil berukuran m: suku dengan D tingkat data dan
+// N−D tingkat lain bernilai n^D · m^min(N−D, maxSmallLevels).
+func evalMixed(p poly, n, m float64) float64 {
+	n, m = math.Max(1, n), math.Max(1, m)
+	sum := 0.0
+	for t, c := range p {
+		lg := math.Max(1, math.Log2(m))
+		if t.D > 0 {
+			lg = math.Max(1, math.Log2(n))
+		}
+		sum += float64(c) * math.Pow(n, float64(t.D)) * math.Pow(m, float64(min(t.N-t.D, maxSmallLevels))) * math.Pow(lg, float64(t.L))
+	}
+	return sum
+}
+
+// dataDegree: pangkat tertinggi terhadap baris data; loose: ada suku dengan tingkat koleksi kecil melebihi
+// maxSmallLevels (perkiraannya batas bawah).
+func (p poly) dataDegree() (deg int, loose bool) {
+	for t, c := range p {
+		if c <= 0 {
+			continue
+		}
+		deg = max(deg, t.D)
+		loose = loose || t.N-t.D > maxSmallLevels
+	}
+	return deg, loose
+}
+
+// Estimate = perkiraan tick & query untuk n baris data tersimpan, dengan koleksi lain (halaman, isi permintaan,
+// memori) berukuran m. Bandingkan dengan Growth, yang memakai kasus terburuk seragam (semua tingkat n).
+func (c Cost) Estimate(n, m float64) (ticks, queries float64) {
+	return evalMixed(c.ticks, n, m), evalMixed(c.queries, n, m)
 }
 
 var growthSizes = []int64{1, 10, 100, 1000, 10000}
@@ -773,6 +926,18 @@ func (c cst) export() Cost {
 		out.Growth = append(out.Growth, GrowthPoint{N: n, Ticks: c.ticks.eval(float64(n)), Queries: c.queries.eval(float64(n))})
 	}
 	out.rank = c.ticks.eval(1e4) + c.queries.eval(1e4)*1e3
+	out.ticks, out.queries = c.ticks, c.queries
+	out.OwnDepth = c.lex
+	out.Composed = out.Degree >= 2 && out.Degree > c.lex
+	out.Drivers, out.Scale = c.drv.names(), c.drv.scale(out.Degree > 0 || out.NPlusOne)
+	var looseQ bool
+	out.DataDegree, out.Loose = c.ticks.dataDegree()
+	qd, looseQ := c.queries.dataDegree()
+	out.DataDegree, out.Loose = max(out.DataDegree, qd), out.Loose || looseQ
+	out.DataBigO = "O(1)"
+	if out.DataDegree > 0 {
+		out.DataBigO = "O(" + termString(term{N: out.DataDegree}) + ")"
+	}
 	return out
 }
 
@@ -785,6 +950,9 @@ type FuncCost struct {
 	Line   int    `json:"line"`
 	End    int    `json:"end"`
 	Routes int    `json:"routes"` // jumlah rute yang menjangkau fungsi ini (lewat handler atau middleware lokalnya)
+	// Trigger: kapan fungsi ini dijalankan — request (per permintaan HTTP), background (worker/goroutine/jadwal),
+	// startup (sekali saat proses dinyalakan), tool (skrip sekali jalan), "" (tidak terjangkau dari main/rute).
+	Trigger string `json:"trigger"`
 	Cost
 }
 
@@ -799,6 +967,8 @@ type RouteCost struct {
 	HandlerDecl string `json:"handler_decl,omitempty"`
 	Auth        bool   `json:"auth"`
 	Middlewares int    `json:"middlewares"` // middleware lokal yang ikut dihitung
+	// Op: jenis operasi dari method + path — list, detail, create, update, delete, other.
+	Op string `json:"op"`
 	Cost
 }
 
@@ -827,6 +997,7 @@ func (g *Graph) computeCosts(m *module) {
 	}
 	g.loopCallees = c.inLoop
 	g.background = g.backgroundReach(m)
+	g.triggers = g.triggerReach(m)
 	// Bukti dikumpulkan setelah semua biaya fungsi termemo, agar biaya fungsi terpanggil sudah final.
 	for k, f := range m.funcs {
 		fc := g.funcCosts[k]
@@ -890,7 +1061,8 @@ func Costs(graphs []*Graph) *CostReport {
 			if !ok {
 				continue
 			}
-			rep.Funcs = append(rep.Funcs, FuncCost{Module: g.Module, Lang: "go", Name: ref.Name, File: ref.File, Line: ref.Line, End: ref.End, Routes: reach[k], Cost: fc})
+			rep.Funcs = append(rep.Funcs, FuncCost{Module: g.Module, Lang: "go", Name: ref.Name, File: ref.File, Line: ref.Line, End: ref.End, Routes: reach[k],
+				Trigger: g.triggerOf(k, reach[k]), Cost: fc})
 		}
 	}
 	finishCosts(rep)
@@ -899,6 +1071,14 @@ func Costs(graphs []*Graph) *CostReport {
 
 // finishCosts mengurutkan rute & fungsi dari yang paling mahal saat data tumbuh dan membuang rute ganda.
 func finishCosts(rep *CostReport) {
+	for i := range rep.Routes {
+		rep.Routes[i].Op = routeOp(rep.Routes[i].Method, rep.Routes[i].Path)
+	}
+	for i := range rep.Funcs {
+		if rep.Funcs[i].Trigger == "" && rep.Funcs[i].Routes > 0 {
+			rep.Funcs[i].Trigger = TriggerRequest
+		}
+	}
 	sort.SliceStable(rep.Routes, func(i, j int) bool {
 		a, b := rep.Routes[i], rep.Routes[j]
 		if a.rank != b.rank {
@@ -1002,7 +1182,9 @@ func Hotspots(graphs []*Graph) []Hotspot {
 		for k, fc := range g.funcCosts {
 			routes := uniqueSorted(routesOf[k])
 			// Tanpa rute: tetap dihitung bila dijalankan di luar rute (worker/antrean/main), bukan kode mati.
-			bg := len(routes) == 0 && g.background[k]
+			// Fungsi yang hanya berjalan sekali saat proses dinyalakan (dipanggil langsung dari main/init) bukan
+			// sumber biaya: bebannya tidak ikut naik bersama jumlah pengguna.
+			bg := len(routes) == 0 && g.background[k] && g.triggers[k] != TriggerStartup
 			if len(routes) == 0 && !bg {
 				continue
 			}
@@ -1035,7 +1217,8 @@ func Hotspots(graphs []*Graph) []Hotspot {
 					bestT, viaT = cc.rank, name
 				}
 			}
-			fn := FuncCost{Module: g.Module, Lang: "go", Name: ref.Name, File: ref.File, Line: ref.Line, End: ref.End, Routes: len(routes), Cost: fc}
+			fn := FuncCost{Module: g.Module, Lang: "go", Name: ref.Name, File: ref.File, Line: ref.Line, End: ref.End, Routes: len(routes),
+				Trigger: g.triggerOf(k, len(routes)), Cost: fc}
 			sample := routes
 			if len(sample) > hotspotRouteSamples {
 				sample = sample[:hotspotRouteSamples]
