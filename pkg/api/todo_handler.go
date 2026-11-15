@@ -12,6 +12,7 @@ import (
 
 	"github.com/vibeasik/vibeasik/pkg/models"
 	"github.com/vibeasik/vibeasik/pkg/registry"
+	"github.com/vibeasik/vibeasik/pkg/util"
 )
 
 func (s *Server) getTodos(c *fiber.Ctx) error {
@@ -444,6 +445,7 @@ func (s *Server) updateTodo(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "todo not found"})
 	}
 
+	oldStatus := todo.Status
 	newStatus := normalizeTodoUpdatePayload(updates, &todo)
 
 	if err := s.db.Model(&todo).Updates(updates).Error; err != nil {
@@ -451,6 +453,9 @@ func (s *Server) updateTodo(c *fiber.Ctx) error {
 	}
 
 	s.applyTodoPostUpdates(&todo, id, newStatus, updates)
+	if newStatus != "" {
+		models.RecordTodoStatusChange(s.db, todo.ID, oldStatus, newStatus, util.FirstNonBlank(todo.CompletedByAgent, "developer"), todo.CompletedByModel, models.TodoWorkViaStudio)
+	}
 
 	return c.JSON(todo)
 }

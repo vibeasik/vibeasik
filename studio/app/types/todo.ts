@@ -187,6 +187,19 @@ export interface TodoCommit {
   truncated?: boolean
 }
 
+/** Satu peristiwa riwayat pengerjaan todo (GET /api/todos/:id/work-logs). */
+export interface TodoWorkLog {
+  id: number
+  todo_id: number
+  event: 'started' | 'completed' | 'reopened' | string
+  agent?: string
+  model?: string
+  employee_name?: string
+  /** Jalur perubahan status: mcp, studio, orchestrator, review. */
+  via?: string
+  created_at: string
+}
+
 /** GET /api/todos/:id/changes — commit null + reason bila belum ada commit yang bisa dibaca. */
 export interface TodoChanges {
   commit: TodoCommit | null

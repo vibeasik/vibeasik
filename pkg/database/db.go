@@ -112,6 +112,7 @@ func migrateDatabaseSchema(db *gorm.DB) error {
 		&models.CensoredKeyword{},
 		&models.LocalAgentConfig{},
 		&models.Todo{},
+		&models.TodoWorkLog{},
 		&models.DeepCheckReport{},
 		&models.RuntimeSimReport{},
 		&models.RuntimeTestProfile{},

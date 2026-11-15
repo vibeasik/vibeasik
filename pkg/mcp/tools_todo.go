@@ -306,6 +306,7 @@ func (s *Server) toolUpdateTodo(args map[string]interface{}) (*ToolCallResult, e
 	}
 
 	newStatus, hasStatus := args["status"].(string)
+	oldStatus := todo.Status
 	updates := buildTodoUpdates(args, &todo, hasStatus, newStatus)
 	if len(updates) > 0 {
 		if err := s.db.Model(&todo).Updates(updates).Error; err != nil {
@@ -335,8 +336,20 @@ func (s *Server) toolUpdateTodo(args map[string]interface{}) (*ToolCallResult, e
 			res.Content = append(res.Content, ToolContent{Type: "text", Text: note})
 		}
 	}
+	if hasStatus {
+		// Dicatat setelah hook agar pegawai yang baru ditugaskan ikut tercatat.
+		who := firstNonEmptyStr(args["completed_by_agent"], args[callerAgentArg], todo.CompletedByAgent, "agent coding")
+		model := firstNonEmptyStr(args["completed_by_model"], args[callerModelArg], todo.CompletedByModel)
+		models.RecordTodoStatusChange(s.db, tid, oldStatus, newStatus, who, model, models.TodoWorkViaMCP)
+	}
 	return res, nil
 }
+
+// Argumen internal update_todo: nama & model agent pada koneksi MCP, diisi server (nilai dari klien dibuang).
+const (
+	callerAgentArg = "_caller_agent"
+	callerModelArg = "_caller_model"
+)
 
 // recordTodoCommit mencatat commit hasil todo: SHA yang dilaporkan agent (commit_sha), atau — saat todo
 // diselesaikan tanpa commit tercatat — commit squash todo itu (trailer "Vibeasik-Branch: vibeasik/todo-<id>-…").

@@ -83,6 +83,14 @@ func (s *Server) HandleRPCFrom(req JSONRPCRequest, caller activity.Caller) JSONR
 			return resp
 		}
 		activity.ToolCalled(caller, params.Name, params.Arguments)
+		if params.Name == "update_todo" && params.Arguments != nil {
+			// Identitas koneksi (bukan dari klien) untuk riwayat pengerjaan todo.
+			delete(params.Arguments, callerAgentArg)
+			delete(params.Arguments, callerModelArg)
+			if name, model := activity.WorkerIdentity(caller); name != "" {
+				params.Arguments[callerAgentArg], params.Arguments[callerModelArg] = name, model
+			}
+		}
 		result, err := s.callTool(params.Name, params.Arguments)
 		activity.ToolFinished(caller, params.Name, err)
 		if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/vibeasik/vibeasik/pkg/models"
 	"github.com/vibeasik/vibeasik/pkg/registry"
 	"github.com/vibeasik/vibeasik/pkg/standard"
+	"github.com/vibeasik/vibeasik/pkg/util"
 )
 
 // rescoreTodo menghitung ulang skor kerumitan/dampak bila dimensinya atau kategori diubah lewat update.
@@ -65,11 +66,13 @@ func (s *Server) approveTodo(c *fiber.Ctx) error {
 		targetStatus = body.Status
 	}
 
+	oldStatus := todo.Status
 	applyTodoApprovalState(&todo, targetStatus)
 
 	if err := s.db.Save(&todo).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
+	models.RecordTodoStatusChange(s.db, todo.ID, oldStatus, targetStatus, util.FirstNonBlank(todo.CompletedByAgent, "developer"), todo.CompletedByModel, models.TodoWorkViaStudio)
 
 	return c.JSON(fiber.Map{"status": "approved", "todo": todo})
 }

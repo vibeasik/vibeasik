@@ -110,6 +110,7 @@ const categoryMeta = computed(() => todoCategoryMeta(props.todo))
       </div>
     </div>
     <TodosTodoCardCompletion v-if="todo.status === 'completed'" :todo="todo" />
+    <TodosTodoCardWorkLog v-if="todo.status !== 'suggested' && todo.status !== 'rejected'" :todo="todo" />
 
     <!-- Actions Footer -->
     <TodosTodoCardActions

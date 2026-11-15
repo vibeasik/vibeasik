@@ -110,6 +110,12 @@ export const useTodosApi = () => {
     return await $fetch<TodoChanges>(`${apiBase}/api/todos/${id}/changes`)
   }
 
+  /** Riwayat pengerjaan todo: kapan mulai/selesai/dibuka lagi dan oleh agent apa (urut lama → baru). */
+  const getTodoWorkLogs = async (id: number): Promise<TodoWorkLog[]> => {
+    const res = await $fetch<{ logs: TodoWorkLog[] }>(`${apiBase}/api/todos/${id}/work-logs`)
+    return res.logs ?? []
+  }
+
   const approveTodo = async (id: number): Promise<Todo> => {
     return await $fetch<Todo>(`${apiBase}/api/todos/${id}/approve`, {
       method: 'POST'
@@ -135,6 +141,7 @@ export const useTodosApi = () => {
     groupTodos,
     splitTodoGroup,
     getTodoChanges,
+    getTodoWorkLogs,
     approveTodo,
     rejectTodo
   }
