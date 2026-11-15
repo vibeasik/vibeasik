@@ -274,6 +274,11 @@ export interface LoadParams {
   req_per_user_min: number
   small_items: number
   base_ms: number
+  file_ms: number
+  net_ms: number
+  exec_ms: number
+  /** baris data saat latensi diukur (jangkar rute terukur) */
+  current_rows: number
   tick_ns: number
   query_ms: number
   row_us: number
@@ -288,6 +293,8 @@ export interface LoadPoint {
   queries: number
   cpu_ms: number
   db_ms: number
+  /** menunggu berkas, panggilan keluar, proses lain */
+  io_ms: number
   latency_ms: number
   status: LoadStatus
 }
@@ -308,6 +315,8 @@ export interface RouteLoad {
   loose?: boolean
   share: number
   measured_ms?: number
+  /** pengali ke latensi terukur; kosong = tidak terukur */
+  anchor?: number
   points: LoadPoint[]
   /** baris data saat respons melewati batas nyaman (0 = tidak; 1 = sudah lambat tanpa data) */
   break_rows: number
@@ -352,6 +361,8 @@ export interface LoadProjection {
   route_scales: Partial<Record<CostScale, number>>
   route_ops: Partial<Record<RouteOp, number>>
   loose_routes: number
+  /** rute yang dijangkarkan ke latensi terukur */
+  anchored: number
   startup: { name: string, file: string, line: number, big_o: string, trigger: CostTrigger, scale: CostScale }[]
   assumptions: string[]
 }

@@ -10,8 +10,8 @@ const props = defineProps<{ projectId: number, reloadKey?: string }>()
 const { getProcessCostProjection } = useApi()
 const STORE = 'vibeasik.processCost.loadForm'
 // Harga tick & query kosong = pakai hasil kalibrasi bila ada, selain itu bawaan server.
-const form = reactive<{ users: string, rows: string, req_per_user_min: number, cores: number, db_conns: number, tick_ns: number | '', query_ms: number | '', small_items: number, budget_ms: number }>({ users: '10, 100, 1000, 10000', rows: '1000, 100000, 1000000', req_per_user_min: 6, cores: 2, db_conns: 20, tick_ns: '', query_ms: '', small_items: 20, budget_ms: 300 })
-const STORE_V = 2
+const form = reactive<{ users: string, rows: string, req_per_user_min: number, cores: number, db_conns: number, tick_ns: number | '', query_ms: number | '', small_items: number, budget_ms: number, current_rows: number }>({ users: '10, 100, 1000, 10000', rows: '1000, 100000, 1000000', req_per_user_min: 6, cores: 2, db_conns: 20, tick_ns: '', query_ms: '', small_items: 20, budget_ms: 300, current_rows: 1000 })
+const STORE_V = 3
 const more = ref(false)
 const data = shallowRef<LoadProjection | null>(null)
 const loading = ref(false)
@@ -137,6 +137,10 @@ const th = 'font-medium px-3 py-2.5'
           <span class="block">Koleksi kecil</span>
           <UInput v-model.number="form.small_items" type="number" min="1" size="sm" class="w-24" />
         </label>
+        <label :class="field" title="Jumlah baris data saat latensi diukur: rute terukur dijangkarkan pada angka ini, lalu tumbuh mengikuti rumus">
+          <span class="block">Baris data saat ini</span>
+          <UInput v-model.number="form.current_rows" type="number" min="1" size="sm" class="w-28" />
+        </label>
         <label :class="field" title="Di atas ini respons dianggap lambat">
           <span class="block">Batas nyaman (md)</span>
           <UInput v-model.number="form.budget_ms" type="number" min="10" size="sm" class="w-24" />
@@ -145,7 +149,7 @@ const th = 'font-medium px-3 py-2.5'
       <UButton type="submit" size="sm" color="neutral" :loading="loading" icon="i-lucide-calculator">
         Hitung
       </UButton>
-      <UButton size="sm" color="neutral" variant="ghost" :aria-pressed="more" :title="more ? 'Sembunyikan harga tick, query, dan batas' : 'Ubah harga tick, query, ukuran koleksi kecil, dan batas nyaman'" @click="more = !more">
+      <UButton size="sm" color="neutral" variant="ghost" :aria-pressed="more" :title="more ? 'Sembunyikan harga tick, query, dan batas' : 'Ubah harga tick, query, ukuran koleksi kecil, baris data saat ini, dan batas nyaman'" @click="more = !more">
         {{ more ? 'Lebih sedikit' : 'Asumsi lain' }}
       </UButton>
     </form>
@@ -160,6 +164,9 @@ const th = 'font-medium px-3 py-2.5'
           <strong class="font-semibold">Kalibrasi {{ data.calibration.applied ? 'dipakai' : 'belum dipakai' }}.</strong>
           {{ data.calibration.note }}
           Harga saat ini: dasar {{ fmtCount(data.params.base_ms) }} md, query {{ fmtCount(data.params.query_ms) }} md, tick {{ fmtCount(data.params.tick_ns) }} ns.
+          <template v-if="data.anchored">
+            {{ data.anchored }} rute terukur dijangkarkan ke latensi nyatanya pada {{ fmtTicks(data.params.current_rows) }} baris; rumus hanya menentukan pertumbuhannya.
+          </template>
         </span>
       </p>
 
@@ -256,7 +263,7 @@ const th = 'font-medium px-3 py-2.5'
                   :key="pt.rows"
                   class="px-3 py-2 text-right font-mono text-xs tabular-nums whitespace-nowrap"
                   :class="r.loose ? 'text-neutral-400 dark:text-neutral-500' : pt.status === 'ok' ? 'text-neutral-900 dark:text-white' : LOAD_STATUS[pt.status].text"
-                  :title="r.loose ? 'Lebih dari dua tingkat koleksi kecil bersarang: angka ini batas bawah dan tidak dihitung ke kapasitas' : `CPU ${fmtMs(pt.cpu_ms)} · database ${fmtMs(pt.db_ms)} · ${fmtTicks(pt.queries)} query${pt.status === 'timeout' ? ' · diputus di batas waktu' : ''}`"
+                  :title="r.loose ? 'Lebih dari dua tingkat koleksi kecil bersarang: angka ini batas bawah dan tidak dihitung ke kapasitas' : `CPU ${fmtMs(pt.cpu_ms)} · database ${fmtMs(pt.db_ms)} · layanan luar ${fmtMs(pt.io_ms)} · ${fmtTicks(pt.queries)} operasi I/O${r.anchor ? ` · dijangkarkan ke latensi terukur (×${fmtCount(r.anchor)})` : ''}${pt.status === 'timeout' ? ' · diputus di batas waktu' : ''}`"
                 >
                   {{ r.loose ? '≥ ' : pt.status === 'timeout' ? '> ' : '' }}{{ fmtMs(pt.latency_ms) }}
                 </td>

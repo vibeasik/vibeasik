@@ -101,6 +101,7 @@ export const LOAD_SIGNALS: Record<string, { label: string, meaning: string }> = 
   nplus1: { label: 'query per item', meaning: 'Query dijalankan di dalam loop atas data (N+1)' },
   db_bound: { label: 'berat di database', meaning: 'Waktu respons ditentukan database' },
   cpu_bound: { label: 'berat di CPU', meaning: 'Waktu respons ditentukan CPU' },
+  external: { label: 'menunggu layanan luar', meaning: 'Waktu respons ditentukan berkas, panggilan HTTP keluar, atau proses lain' },
   slow_at_scale: { label: 'lambat saat data besar', meaning: 'Melewati batas nyaman pada jumlah baris di kolom "Mulai lambat"' },
   measure: { label: 'perlu diukur', meaning: 'Tidak bisa diperkirakan dari kode saja: ukur dengan trafik nyata' }
 }

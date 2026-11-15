@@ -381,7 +381,10 @@ func codeMapLoad(s *Server, pid uint, limit int) (*ToolCallResult, error) {
 			b.WriteString(" [tidak bisa diperkirakan dari kode saja: tidak dihitung ke kapasitas]")
 		}
 		for _, pt := range r.Points {
-			fmt.Fprintf(&b, " %d baris: %.1f ms (CPU %.1f, DB %.1f, %.0f query) %s;", pt.Rows, pt.LatencyMs, pt.CPUMs, pt.DBMs, pt.Queries, pt.Status)
+			fmt.Fprintf(&b, " %d baris: %.1f ms (CPU %.1f, DB %.1f, layanan luar %.1f, %.0f operasi I/O) %s;", pt.Rows, pt.LatencyMs, pt.CPUMs, pt.DBMs, pt.IOMs, pt.Queries, pt.Status)
+		}
+		if r.Anchor > 0 {
+			fmt.Fprintf(&b, "\n  terukur %.1f ms: perkiraan dijangkarkan (×%.2f)", r.MeasuredMs, r.Anchor)
 		}
 		if r.BreakRows > 0 {
 			fmt.Fprintf(&b, "\n  melewati batas nyaman mulai ±%d baris", r.BreakRows)

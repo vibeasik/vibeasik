@@ -185,3 +185,30 @@ func TestProjectionAppliesCalibration(t *testing.T) {
 		}
 	}
 }
+
+// Rute terukur dijangkarkan: pada CurrentRows perkiraan sama dengan pengukuran, dan pertumbuhannya mengikuti rumus.
+func TestMeasuredRouteIsAnchored(t *testing.T) {
+	rep := loadReport(t)
+	ms := map[string]float64{routeKey("GET", "/items"): 40, routeKey("GET", "/items/:id"): 3}
+	p := LoadParams{Rows: []int64{100, 1000}, CurrentRows: 100}
+	out := buildProjection(rep, p, nil, &measuredLatency{source: "deep_check", ms: ms}, 0)
+	if out.Anchored != 2 {
+		t.Fatalf("rute dijangkarkan: %d", out.Anchored)
+	}
+	for _, r := range out.Routes {
+		switch r.Method + " " + r.Path {
+		case "GET /items": // N+1: 10× baris → ±10× waktu, berangkat dari 40 ms terukur
+			if a, b := r.Points[0].LatencyMs, r.Points[1].LatencyMs; a < 39.9 || a > 40.1 || b < 350 || b > 450 || r.Anchor >= 1 {
+				t.Errorf("daftar: %.1f → %.1f ms, jangkar %.3f", a, b, r.Anchor)
+			}
+		case "GET /items/:id":
+			if a, b := r.Points[0].LatencyMs, r.Points[1].LatencyMs; a < 2.99 || a > 3.01 || a != b {
+				t.Errorf("detail: %.2f → %.2f ms", a, b)
+			}
+		case "POST /items":
+			if r.Anchor != 0 {
+				t.Errorf("rute tanpa pengukuran tidak boleh dijangkarkan: %.2f", r.Anchor)
+			}
+		}
+	}
+}

@@ -36,6 +36,10 @@ type LoadParams struct {
 	TickNs        float64 `json:"tick_ns"`          // harga satu tick (nanodetik CPU)
 	QueryMs       float64 `json:"query_ms"`         // harga satu query berindeks (milidetik)
 	RowUs         float64 `json:"row_us"`           // harga membaca & mengirim satu baris data (mikrodetik)
+	FileMs        float64 `json:"file_ms"`          // harga satu akses berkas (milidetik)
+	NetMs         float64 `json:"net_ms"`           // harga satu panggilan keluar: HTTP, email, antrean (milidetik)
+	ExecMs        float64 `json:"exec_ms"`          // harga menjalankan satu proses lain (milidetik)
+	CurrentRows   float64 `json:"current_rows"`     // baris data saat latensi diukur (jangkar rute terukur)
 	Cores         float64 `json:"cores"`            // inti CPU server aplikasi
 	DBConns       float64 `json:"db_conns"`         // koneksi database yang tersedia (pool)
 	BudgetMs      float64 `json:"budget_ms"`        // batas waktu respons yang masih nyaman
@@ -59,7 +63,11 @@ func (p LoadParams) withDefaults() LoadParams {
 	def(&p.BaseMs, 0.5)
 	def(&p.TickNs, 50)
 	def(&p.QueryMs, 2)
-	def(&p.RowUs, 2)
+	def(&p.RowUs, 20)
+	def(&p.FileMs, 0.05)
+	def(&p.NetMs, 150)
+	def(&p.ExecMs, 40)
+	def(&p.CurrentRows, 1000)
 	def(&p.Cores, 2)
 	def(&p.DBConns, 20)
 	def(&p.BudgetMs, 300)
@@ -98,6 +106,7 @@ type LoadPoint struct {
 	Queries   float64 `json:"queries"`
 	CPUMs     float64 `json:"cpu_ms"`
 	DBMs      float64 `json:"db_ms"`
+	IOMs      float64 `json:"io_ms"` // menunggu berkas, panggilan keluar, proses lain (tidak memakai CPU/koneksi DB)
 	LatencyMs float64 `json:"latency_ms"`
 	Status    string  `json:"status"` // ok | slow | timeout
 }
@@ -121,8 +130,11 @@ type RouteLoad struct {
 	Loose bool    `json:"loose,omitempty"`
 	Share float64 `json:"share"` // porsi trafik (0–1)
 	// MeasuredMs: latensi rata-rata nyata dari data trafik (0 = belum ada), pembanding perkiraan.
-	MeasuredMs float64     `json:"measured_ms,omitempty"`
-	Points     []LoadPoint `json:"points"`
+	MeasuredMs float64 `json:"measured_ms,omitempty"`
+	// Anchor: rute terukur dijangkarkan — perkiraan dikalikan Anchor agar sama dengan latensi terukur pada
+	// CurrentRows; rumus hanya menentukan pertumbuhannya. 0 = tidak terukur, memakai harga perkiraan.
+	Anchor float64     `json:"anchor,omitempty"`
+	Points []LoadPoint `json:"points"`
 	// BreakRows: jumlah baris data saat respons mulai melewati batas nyaman (0 = tidak dalam rentang 1 miliar
 	// baris; 1 = sudah lambat tanpa data).
 	BreakRows int64 `json:"break_rows"`
@@ -184,6 +196,7 @@ type LoadProjection struct {
 	RouteScales  map[string]int `json:"route_scales"`  // lapisan guna: jumlah rute per arti n
 	RouteOps     map[string]int `json:"route_ops"`     // lapisan pemakaian: jumlah rute per jenis operasi
 	LooseRoutes  int            `json:"loose_routes"`  // rute yang tidak bisa diperkirakan dari kode saja
+	Anchored     int            `json:"anchored"`      // rute yang dijangkarkan ke latensi terukur
 	Startup      []StartupCost  `json:"startup"`
 	Assumptions  []string       `json:"assumptions"`
 }
@@ -200,23 +213,45 @@ var opWeights = map[string]float64{
 	routemap.OpList: 0.35, routemap.OpDetail: 0.30, routemap.OpCreate: 0.12, routemap.OpUpdate: 0.15, routemap.OpDelete: 0.05, routemap.OpOther: 0.03,
 }
 
-// point: biaya satu permintaan rute pada `rows` baris data.
-func (p LoadParams) point(c routemap.Cost, rows int64) LoadPoint {
+// rawPoint: biaya satu permintaan rute pada `rows` baris data, sebelum jangkar & batas waktu.
+func (p LoadParams) rawPoint(c routemap.Cost, rows int64) LoadPoint {
 	ticks, queries := c.Estimate(float64(rows), p.SmallItems)
-	pt := LoadPoint{Rows: rows, Queries: queries, CPUMs: p.BaseMs + ticks*p.TickNs/1e6, DBMs: queries * p.QueryMs}
+	io := c.EstimateIO(float64(rows), p.SmallItems)
+	pt := LoadPoint{Rows: rows, Queries: queries, CPUMs: p.BaseMs + ticks*p.TickNs/1e6, DBMs: io.DB * p.QueryMs,
+		IOMs: io.File*p.FileMs + io.Net*p.NetMs + io.Exec*p.ExecMs}
 	switch c.Scale {
 	case routemap.ScaleData: // membaca & mengirim baris yang ikut tumbuh bersama data
 		pt.DBMs += float64(rows) * p.RowUs / 1e3
 	case routemap.ScalePage:
 		pt.DBMs += math.Min(float64(rows), p.SmallItems) * p.RowUs / 1e3
 	}
-	pt.LatencyMs = pt.CPUMs + pt.DBMs
+	pt.LatencyMs = pt.CPUMs + pt.DBMs + pt.IOMs
+	return pt
+}
+
+const minAnchor, maxAnchor = 0.01, 100
+
+// anchorFor: pengali agar perkiraan pada CurrentRows sama dengan latensi terukur (dibatasi 0,01–100×).
+func (p LoadParams) anchorFor(c routemap.Cost, measuredMs float64) float64 {
+	est := p.rawPoint(c, int64(p.CurrentRows)).LatencyMs
+	if measuredMs <= 0 || est <= 0 {
+		return 0
+	}
+	return math.Min(maxAnchor, math.Max(minAnchor, measuredMs/est))
+}
+
+// point: biaya satu permintaan rute pada `rows` baris data; anchor > 0 menskalakan ke latensi terukur.
+func (p LoadParams) point(c routemap.Cost, rows int64, anchor float64) LoadPoint {
+	pt := p.rawPoint(c, rows)
+	if anchor > 0 {
+		pt.CPUMs, pt.DBMs, pt.IOMs, pt.LatencyMs = pt.CPUMs*anchor, pt.DBMs*anchor, pt.IOMs*anchor, pt.LatencyMs*anchor
+	}
 	switch {
 	case pt.LatencyMs >= p.TimeoutMs:
 		pt.Status = LoadTimeout
 		// Permintaan diputus di batas waktu: beban yang ditanggung server berhenti di sana.
 		f := p.TimeoutMs / pt.LatencyMs
-		pt.CPUMs, pt.DBMs, pt.Queries, pt.LatencyMs = pt.CPUMs*f, pt.DBMs*f, pt.Queries*f, p.TimeoutMs
+		pt.CPUMs, pt.DBMs, pt.IOMs, pt.Queries, pt.LatencyMs = pt.CPUMs*f, pt.DBMs*f, pt.IOMs*f, pt.Queries*f, p.TimeoutMs
 	case pt.LatencyMs > p.BudgetMs:
 		pt.Status = LoadSlow
 	default:
@@ -226,17 +261,17 @@ func (p LoadParams) point(c routemap.Cost, rows int64) LoadPoint {
 }
 
 // breakRows: baris data terkecil saat respons melewati batas nyaman (pencarian biner; biaya naik monoton).
-func (p LoadParams) breakRows(c routemap.Cost) int64 {
-	if p.point(c, 1).Status != LoadOK {
+func (p LoadParams) breakRows(c routemap.Cost, anchor float64) int64 {
+	if p.point(c, 1, anchor).Status != LoadOK {
 		return 1
 	}
-	if p.point(c, maxBreakRows).Status == LoadOK {
+	if p.point(c, maxBreakRows, anchor).Status == LoadOK {
 		return 0
 	}
 	lo, hi := int64(1), maxBreakRows
 	for hi-lo > 1 {
 		mid := lo + (hi-lo)/2
-		if p.point(c, mid).Status == LoadOK {
+		if p.point(c, mid, anchor).Status == LoadOK {
 			lo = mid
 		} else {
 			hi = mid
@@ -324,9 +359,13 @@ func routeSignals(r routemap.RouteCost, pts []LoadPoint, breakRows int64) []stri
 		out = append(out, "nplus1")
 	}
 	if len(pts) > 0 {
-		if last := pts[len(pts)-1]; last.DBMs > last.CPUMs {
+		last := pts[len(pts)-1]
+		switch {
+		case last.IOMs > last.DBMs && last.IOMs > last.CPUMs:
+			out = append(out, "external")
+		case last.DBMs > last.CPUMs:
 			out = append(out, "db_bound")
-		} else if last.CPUMs > 1 {
+		case last.CPUMs > 1:
 			out = append(out, "cpu_bound")
 		}
 	}
@@ -375,9 +414,10 @@ func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, me
 				continue
 			}
 			hit++
-			if r.DataDegree == 0 && !r.Loose {
-				t, q := r.Estimate(1, p.SmallItems)
-				samples = append(samples, calSample{ms: ms, ticks: t, queries: q})
+			// Layak dicocokkan: biaya tidak bergantung baris data dan tanpa I/O luar (harganya tidak diketahui).
+			if io := r.EstimateIO(1, p.SmallItems); r.DataDegree == 0 && !r.Loose && io.Net == 0 && io.Exec == 0 {
+				t, _ := r.Estimate(1, p.SmallItems)
+				samples = append(samples, calSample{ms: ms, ticks: t, queries: io.DB})
 			}
 		}
 		cal = calibrate(measured.source, hit, samples)
@@ -442,10 +482,14 @@ func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, me
 		if measured != nil {
 			rl.MeasuredMs = math.Round(measured.ms[routeKey(r.Method, r.Path)]*100) / 100
 		}
-		for _, rows := range p.Rows {
-			rl.Points = append(rl.Points, p.point(r.Cost, rows))
+		rl.Anchor = p.anchorFor(r.Cost, rl.MeasuredMs)
+		if rl.Anchor > 0 {
+			out.Anchored++
 		}
-		rl.BreakRows = p.breakRows(r.Cost)
+		for _, rows := range p.Rows {
+			rl.Points = append(rl.Points, p.point(r.Cost, rows, rl.Anchor))
+		}
+		rl.BreakRows = p.breakRows(r.Cost, rl.Anchor)
 		rl.Signals = routeSignals(r, rl.Points, rl.BreakRows)
 		loads[i] = rl
 	}
@@ -516,7 +560,8 @@ func buildProjection(rep *routemap.CostReport, p LoadParams, mix *trafficMix, me
 	out.Assumptions = []string{
 		mixNote,
 		fmt.Sprintf("Tiap pengguna aktif mengirim %.3g permintaan per menit.", p.ReqPerUserMin),
-		fmt.Sprintf("Ongkos dasar per permintaan = %.3g ms, satu tick = %.3g ns CPU, satu query = %.3g ms, satu baris data terbaca = %.3g µs.", p.BaseMs, p.TickNs, p.QueryMs, p.RowUs),
+		fmt.Sprintf("Ongkos dasar per permintaan = %.3g ms, satu tick = %.3g ns CPU, satu query = %.3g ms, satu baris data terbaca & terkirim = %.3g µs, satu akses berkas = %.3g ms, satu panggilan keluar (HTTP, email, antrean) = %.3g ms, satu proses lain = %.3g ms.", p.BaseMs, p.TickNs, p.QueryMs, p.RowUs, p.FileMs, p.NetMs, p.ExecMs),
+		fmt.Sprintf("%d rute punya latensi terukur dan dijangkarkan: perkiraannya dikalikan agar sama dengan pengukuran pada %.0f baris data (anggapan jumlah baris saat diukur); rumus hanya menentukan pertumbuhannya.", out.Anchored, p.CurrentRows),
 		"Kalibrasi: " + cal.Note,
 		fmt.Sprintf("Hanya tingkat loop yang memutari hasil query tanpa Limit yang dihitung sebanyak baris data; tingkat lain (satu halaman, isi permintaan, koleksi di memori) dihitung %.3g putaran, paling banyak dua tingkat. Rumus Big-O di tabel tetap kasus terburuk (semua tingkat n).", p.SmallItems),
 		fmt.Sprintf("%d rute punya lebih dari dua tingkat koleksi kecil bersarang (pangkat hasil perkalian lintas fungsi): perkiraannya tidak bisa dipercaya dari kode saja, jadi tidak dihitung ke beban & kapasitas. Ukur rute itu dengan trafik nyata.", out.LooseRoutes),
