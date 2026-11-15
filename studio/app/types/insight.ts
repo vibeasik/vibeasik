@@ -136,7 +136,26 @@ export interface ProcessCost {
   /** baris kode yang menaikkan biaya, di berkas evidence_file; kosong untuk biaya tetap tanpa query */
   evidence?: CostEvidence[]
   evidence_file?: string
+  /** kedalaman loop atas data yang ditulis di fungsi itu sendiri */
+  own_depth?: number
+  /** pangkat berasal dari perkalian lintas fungsi: batas atas longgar */
+  composed?: boolean
+  /** asal data yang diputari: db, page, input, file, param, memory */
+  drivers?: string[]
+  /** arti n untuk proyeksi beban */
+  scale?: CostScale
+  /** pertumbuhan terhadap baris data saja (tingkat loop atas hasil query tanpa Limit) */
+  data_degree?: number
+  data_big_o?: string
+  /** lebih dari dua tingkat koleksi kecil bersarang: perkiraan beban tidak bisa dipercaya dari kode saja */
+  loose?: boolean
 }
+
+/** Arti n: data = baris tersimpan · page = satu halaman · input = isi permintaan · file · memory · fixed = tetap */
+export type CostScale = 'data' | 'page' | 'input' | 'file' | 'memory' | 'fixed'
+/** Kapan fungsi dijalankan; '' = tidak terjangkau dari main/rute */
+export type CostTrigger = 'request' | 'background' | 'startup' | 'tool' | ''
+export type RouteOp = 'list' | 'detail' | 'create' | 'update' | 'delete' | 'other'
 
 export type CostLang = 'go' | 'php'
 
@@ -197,6 +216,7 @@ export interface RouteCost extends ProcessCost, CostRowHandling {
   handler_decl?: string
   auth: boolean
   middlewares: number
+  op?: RouteOp
 }
 
 export interface FuncCost extends ProcessCost, CostRowHandling {
@@ -208,6 +228,7 @@ export interface FuncCost extends ProcessCost, CostRowHandling {
   /** baris penutup badan fungsi */
   end?: number
   routes: number
+  trigger?: CostTrigger
 }
 
 export interface ProcessCostSnapshot {
@@ -238,6 +259,98 @@ export interface ProcessCostSummary {
   unbounded: number
   route_ticks_1: number
   worst_route?: RouteCost
+  /** jumlah fungsi per pemicu (request, background, startup, tool, unreached) */
+  func_triggers?: Record<string, number>
+  /** jumlah rute per arti n */
+  route_scales?: Partial<Record<CostScale, number>>
+}
+
+export type LoadStatus = 'ok' | 'tight' | 'over' | 'slow' | 'timeout'
+
+/** Asumsi proyeksi beban; nilai kosong diganti bawaan server. */
+export interface LoadParams {
+  users: number[]
+  rows: number[]
+  req_per_user_min: number
+  small_items: number
+  tick_ns: number
+  query_ms: number
+  row_us: number
+  cores: number
+  db_conns: number
+  budget_ms: number
+  timeout_ms: number
+}
+
+export interface LoadPoint {
+  rows: number
+  queries: number
+  cpu_ms: number
+  db_ms: number
+  latency_ms: number
+  status: LoadStatus
+}
+
+export interface RouteLoad {
+  method: string
+  path: string
+  handler: string
+  op: RouteOp
+  scale: CostScale
+  drivers?: string[]
+  big_o: string
+  query_formula: string
+  data_big_o: string
+  n_plus_one: boolean
+  composed?: boolean
+  /** tidak bisa diperkirakan dari kode saja: tidak dihitung ke kapasitas */
+  loose?: boolean
+  share: number
+  measured_ms?: number
+  points: LoadPoint[]
+  /** baris data saat respons melewati batas nyaman (0 = tidak; 1 = sudah lambat tanpa data) */
+  break_rows: number
+  signals?: string[]
+}
+
+export interface LoadScenario {
+  users: number
+  rows: number
+  rps: number
+  qps: number
+  cpu_cores: number
+  db_conns: number
+  cpu_use: number
+  db_use: number
+  avg_ms: number
+  slow_routes: number
+  status: LoadStatus
+  bottleneck: 'cpu' | 'db' | ''
+}
+
+export interface LoadLimit {
+  rows: number
+  max_users: number
+  by_cpu: number
+  by_db: number
+  bottleneck: 'cpu' | 'db'
+}
+
+export interface LoadProjection {
+  supported: boolean
+  params: LoadParams
+  mix: 'assumed' | 'traffic'
+  mix_requests?: number
+  scenarios: LoadScenario[]
+  limits: LoadLimit[]
+  routes: RouteLoad[]
+  total_routes: number
+  func_triggers: Record<string, number>
+  route_scales: Partial<Record<CostScale, number>>
+  route_ops: Partial<Record<RouteOp, number>>
+  loose_routes: number
+  startup: { name: string, file: string, line: number, big_o: string, trigger: CostTrigger, scale: CostScale }[]
+  assumptions: string[]
 }
 
 export interface ProcessCostPage {

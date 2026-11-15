@@ -9,6 +9,9 @@ const RULES = [
   { code: 'pustaka luar', text: '1 tick; sort/usort/sortBy = n log n; callback Map/Filter/Walk, array_map, ->each/->map = n × isi callback' },
   { code: 'query database', text: 'dihitung terpisah sebagai Q(n): GORM/sql (Go), Eloquent/DB::/PDO/CodeIgniter (PHP); di dalam loop → Q(n) = n + 1' },
   { code: 'rute PHP', text: 'Laravel Route:: (group, prefix, middleware, resource), CodeIgniter $routes, Slim $app; tanpa router: tiap berkas .php = satu halaman' },
+  { code: 'callback terdaftar', text: 'handler rute / job yang hanya didaftarkan (HandleFunc, Get, AddFunc …) bukan biaya fungsi pendaftarnya: dihitung sebagai rute atau saat dijalankan' },
+  { code: 'pemicu', text: 'per permintaan (naik bersama pengguna), latar belakang (worker/goroutine), atau sekali saat start (dipanggil langsung dari main/init) — yang terakhir bukan sumber biaya' },
+  { code: 'arti n', text: 'baris data (query tanpa Limit), satu halaman (ber-Limit), isi permintaan, berkas, atau koleksi di memori. Hanya loop atas baris data yang ikut tumbuh bersama data tersimpan ("data O(n)"); proyeksi beban memakai pangkat itu' },
   { code: 'penanganan', text: 'fungsi sumber N+1 / O(n²) ke atas otomatis jadi temuan Audit; "Buat todo" memakai kunci audit yang sama (aturan + berkas), jadi audit berikutnya menggabung ke todo itu' }
 ]
 const EXAMPLES = [
@@ -50,7 +53,7 @@ const EXAMPLES = [
       </ul>
     </div>
     <p class="text-xs text-neutral-500">
-      Batasan: semua koleksi dianggap berukuran n; rekursi ditandai dan rumusnya menjadi batas bawah; biaya di dalam pustaka luar dan mesin database tidak ikut dihitung; di PHP, relasi Eloquent yang dibaca sebagai properti ($post->user) tidak terlihat sebagai query.
+      Batasan: semua koleksi dianggap berukuran n, jadi pangkat hasil perkalian lintas fungsi adalah batas atas longgar (ditandai "lintas fungsi"); rekursi ditandai dan rumusnya menjadi batas bawah; biaya di dalam pustaka luar dan mesin database tidak ikut dihitung; di PHP, relasi Eloquent yang dibaca sebagai properti ($post->user) tidak terlihat sebagai query.
     </p>
   </section>
 </template>

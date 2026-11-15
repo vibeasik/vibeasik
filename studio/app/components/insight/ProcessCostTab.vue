@@ -245,6 +245,8 @@ const card = 'min-w-0 rounded-2xl border border-neutral-200 dark:border-white/10
 
         <AppStatStrip :items="stats" />
 
+        <InsightProcessCostLoadPanel :project-id="project.id" :reload-key="page.computed_at" />
+
         <div class="grid grid-cols-1 gap-3" :class="history.length > 1 ? 'lg:grid-cols-3' : ''">
           <section :class="[card, history.length > 1 ? 'lg:col-span-2' : '']" class="space-y-3">
             <div class="flex items-baseline justify-between gap-2">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CostCallee, CostRowHandling, CostSource, FuncCost, ProcessCost, RouteCost } from '~/types'
-import { costClassInfo, costHandledBadge, costStackLabel, fmtTicks, shortFormula } from '~/utils/processCost'
+import { ROUTE_OPS, costClassInfo, costHandledBadge, costScaleInfo, costStackLabel, costTriggerInfo, fmtTicks, shortFormula } from '~/utils/processCost'
 
 // Tabel rumus biaya per rute atau per fungsi; klik baris untuk melihat bukti di kode (baris loop/query yang
 // membentuk rumusnya) dan pertumbuhan T(n) pada n = 1 … 10.000.
@@ -16,11 +16,11 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ 'make-todo': [src: CostSource], 'open-todo': [id: number], 'open-func': [callee: CostCallee], 'focused': [] }>()
 
-type Row = ProcessCost & CostRowHandling & { key: string, title: string, sub: string, method?: string }
+type Row = ProcessCost & CostRowHandling & { key: string, title: string, sub: string, method?: string, when: string, whenTitle: string, calm: boolean }
 const srcKey = (s: CostSource) => `${s.kind}|${s.file}|${s.line}`
 const rows = computed<Row[]>(() => props.kind === 'routes'
-  ? props.routes.map(r => ({ ...r, key: `${r.module}|${r.method}|${r.path}`, title: r.path, method: r.method, sub: `${costStackLabel(r)} · ${r.handler}${r.middlewares ? ` · +${r.middlewares} middleware` : ''}` }))
-  : props.funcs.map(f => ({ ...f, key: `${f.module}|${f.file}|${f.name}|${f.line}`, title: f.name, sub: `${costStackLabel(f)} · ${f.file}:${f.line}${f.routes ? ` · dipakai ${f.routes} rute` : ''}` })))
+  ? props.routes.map(r => ({ ...r, key: `${r.module}|${r.method}|${r.path}`, title: r.path, method: r.method, sub: `${costStackLabel(r)} · ${r.handler}${r.middlewares ? ` · +${r.middlewares} middleware` : ''}`, when: ROUTE_OPS[r.op || 'other'], whenTitle: 'jenis operasi rute, dari method dan path', calm: false }))
+  : props.funcs.map(f => ({ ...f, key: `${f.module}|${f.file}|${f.name}|${f.line}`, title: f.name, sub: `${costStackLabel(f)} · ${f.file}:${f.line}${f.routes ? ` · dipakai ${f.routes} rute` : ''}`, when: costTriggerInfo(f.trigger).label, whenTitle: costTriggerInfo(f.trigger).meaning, calm: f.trigger === 'startup' || f.trigger === 'tool' })))
 
 const open = ref<string | null>(null)
 const toggle = (key: string) => { open.value = open.value === key ? null : key }
@@ -114,6 +114,12 @@ const METHOD_TONE: Record<string, string> = {
               </span>
               <span v-if="r.recursive" class="ml-1.5 text-xs text-amber-700 dark:text-amber-400" title="Ada rekursi: rumus adalah batas bawah">rekursif</span>
               <span v-if="r.unbounded" class="ml-1.5 text-xs text-amber-700 dark:text-amber-400" title="Ada loop tanpa syarat berhenti (for {})">loop tanpa batas</span>
+              <div class="text-xs text-neutral-500">
+                <span :title="r.whenTitle" :class="r.calm ? 'text-emerald-700 dark:text-emerald-400' : ''">{{ r.when }}</span>
+                · <span :title="costScaleInfo(r.scale).meaning">n = {{ costScaleInfo(r.scale).label }}</span>
+                <span v-if="r.degree && r.data_big_o && r.data_big_o !== r.big_o" :title="`Hanya ${r.data_degree || 0} dari ${r.degree} tingkat loop yang memutari baris data: terhadap data tersimpan biayanya tumbuh ${r.data_big_o}`"> · data {{ r.data_big_o }}</span>
+                <span v-if="r.composed" title="Pangkat ini hasil perkalian lintas fungsi, bukan loop bersarang di satu fungsi: batas atas longgar"> · lintas fungsi</span>
+              </div>
             </td>
             <td class="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-neutral-900 dark:text-white">
               {{ fmtTicks(r.ticks_1) }}
@@ -189,6 +195,18 @@ const METHOD_TONE: Record<string, string> = {
                 Rumus lengkap
               </div>
               <code class="block font-mono text-xs text-neutral-900 dark:text-white break-words mb-3">T(n) = {{ r.formula }}</code>
+              <p class="text-xs text-neutral-600 dark:text-neutral-300 mb-3 max-w-3xl">
+                {{ costScaleInfo(r.scale).meaning }}.
+                <template v-if="r.degree">
+                  Terhadap baris data saja biayanya tumbuh {{ r.data_big_o || 'O(1)' }} ({{ r.data_degree || 0 }} dari {{ r.degree }} tingkat loop memutari hasil query tanpa Limit).
+                </template>
+                <template v-if="r.calm">
+                  {{ r.whenTitle }} — tidak perlu ditangani kecuali waktu start menjadi masalah.
+                </template>
+                <template v-if="r.composed">
+                  Pangkat {{ r.big_o }} berasal dari perkalian lintas fungsi (loop yang ditulis di sini sendiri: {{ r.own_depth || 0 }} tingkat). Tiap tingkat biasanya memutari koleksi yang berbeda ukurannya, jadi angka di bawah adalah batas atas longgar.
+                </template>
+              </p>
               <div class="text-xs text-neutral-500 mb-2">
                 Bila jumlah data tumbuh — {{ costClassInfo(r.class).meaning }}
               </div>

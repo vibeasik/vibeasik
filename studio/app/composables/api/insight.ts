@@ -1,6 +1,6 @@
 // Domain API "insight": rekap pemilik dan biaya proses (tick & Big-O).
 import { useApiBase } from './base'
-import type { CostSource, CostSourceWindow, CostTodoBatch, FindingsTodoPrompt, OwnerRecap, ProcessCostPage, Todo } from '~/types'
+import type { CostSource, CostSourceWindow, CostTodoBatch, FindingsTodoPrompt, LoadProjection, OwnerRecap, ProcessCostPage, Todo } from '~/types'
 
 export interface ProcessCostQuery {
   kind?: 'routes' | 'funcs'
@@ -32,9 +32,13 @@ export const useInsightApi = () => {
   const getProcessCostSource = async (projectId: number, file: string, from: number, to: number): Promise<CostSourceWindow> =>
     await $fetch(`${apiBase}/api/projects/${projectId}/process-cost/source`, { query: { file, from, to } })
 
+  /** Proyeksi beban server dari rumus biaya: pengguna aktif × baris data → CPU, koneksi DB, titik jenuh. */
+  const getProcessCostProjection = async (projectId: number, query: Record<string, string | number> = {}, signal?: AbortSignal): Promise<LoadProjection> =>
+    await $fetch<LoadProjection>(`${apiBase}/api/projects/${projectId}/process-cost/projection`, { query, signal, timeout: 120000 })
+
   /** Prompt siap salin untuk agent coding: temuan satu sumber (audit, cost, runtime) → todo lewat MCP, tanpa LLM luar. */
   const getFindingsTodoPrompt = async (projectId: number, scope: string): Promise<FindingsTodoPrompt> =>
     await $fetch(`${apiBase}/api/projects/${projectId}/findings/todo-prompt`, { query: { scope } })
 
-  return { getOwnerRecap, getProcessCost, createProcessCostTodo, createAllProcessCostTodos, getProcessCostSource, getFindingsTodoPrompt }
+  return { getOwnerRecap, getProcessCost, getProcessCostProjection, createProcessCostTodo, createAllProcessCostTodos, getProcessCostSource, getFindingsTodoPrompt }
 }

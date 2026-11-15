@@ -1,4 +1,4 @@
-import type { CostClass, CostHandling, CostHandlingSummary } from '~/types'
+import type { CostClass, CostHandling, CostHandlingSummary, CostScale, CostTrigger, LoadStatus, RouteOp } from '~/types'
 
 // Kelas pertumbuhan: label manusiawi + warna status. Warna selalu ditemani label (tidak bergantung warna saja).
 export const COST_CLASSES: { key: CostClass, bigO: string, label: string, meaning: string, bar: string, text: string }[] = [
@@ -63,3 +63,52 @@ export const costHandlingNote = (s: CostHandlingSummary) => {
     next: todo.length ? `Lakukan: ${todo.join('; ')}.` : 'Tidak ada yang perlu dilakukan.'
   }
 }
+
+// Lapisan di atas rumus: arti n, pemicu fungsi, jenis operasi rute.
+export const COST_SCALES: Record<CostScale, { label: string, meaning: string }> = {
+  data: { label: 'baris data', meaning: 'n = baris data tersimpan: ikut tumbuh bersama data' },
+  page: { label: 'satu halaman', meaning: 'n dibatasi Limit query: paling banyak satu halaman' },
+  input: { label: 'isi permintaan', meaning: 'n = banyaknya isi permintaan: dibatasi klien, tidak tumbuh bersama data' },
+  file: { label: 'berkas', meaning: 'n = banyaknya berkas atau baris berkas' },
+  memory: { label: 'koleksi di memori', meaning: 'n = koleksi di memori atau asal datanya tidak diketahui' },
+  fixed: { label: 'tetap', meaning: 'tidak ada loop atas data: biaya tetap per pemanggilan' }
+}
+export const costScaleInfo = (k?: string) => COST_SCALES[(k || 'fixed') as CostScale] ?? COST_SCALES.fixed
+
+export const COST_TRIGGERS: Record<string, { label: string, meaning: string }> = {
+  request: { label: 'per permintaan', meaning: 'dijalankan tiap permintaan: bebannya naik bersama pengguna aktif' },
+  background: { label: 'latar belakang', meaning: 'worker, goroutine, atau callback terdaftar: bebannya mengikuti jumlah peristiwa/jadwal' },
+  startup: { label: 'sekali saat start', meaning: 'hanya dipanggil dari main/init: berjalan sekali saat proses dinyalakan, tidak tumbuh bersama pengguna' },
+  tool: { label: 'skrip sekali jalan', meaning: 'alat bantu, seed, atau migrasi: dijalankan manual' },
+  unreached: { label: 'tidak terjangkau', meaning: 'tidak terjangkau dari main maupun rute' }
+}
+export const costTriggerInfo = (k?: CostTrigger | string) => COST_TRIGGERS[k || 'unreached'] ?? COST_TRIGGERS.unreached!
+
+export const ROUTE_OPS: Record<RouteOp, string> = { list: 'daftar', detail: 'detail', create: 'buat', update: 'ubah', delete: 'hapus', other: 'lainnya' }
+
+// Status beban: warna selalu ditemani label.
+export const LOAD_STATUS: Record<LoadStatus, { label: string, text: string, dot: string }> = {
+  ok: { label: 'aman', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  tight: { label: 'mepet', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+  over: { label: 'melebihi', text: 'text-rose-700 dark:text-rose-400', dot: 'bg-rose-500' },
+  slow: { label: 'lambat', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+  timeout: { label: 'putus', text: 'text-rose-700 dark:text-rose-400', dot: 'bg-rose-500' }
+}
+
+export const LOAD_SIGNALS: Record<string, { label: string, meaning: string }> = {
+  cache: { label: 'calon cache', meaning: 'Bacaan yang menjalankan query: hasilnya bisa disimpan sementara' },
+  paginate: { label: 'perlu paging', meaning: 'Daftar yang ikut tumbuh bersama data tersimpan' },
+  nplus1: { label: 'query per item', meaning: 'Query dijalankan di dalam loop atas data (N+1)' },
+  db_bound: { label: 'berat di database', meaning: 'Waktu respons ditentukan database' },
+  cpu_bound: { label: 'berat di CPU', meaning: 'Waktu respons ditentukan CPU' },
+  slow_at_scale: { label: 'lambat saat data besar', meaning: 'Melewati batas nyaman pada jumlah baris di kolom "Mulai lambat"' },
+  measure: { label: 'perlu diukur', meaning: 'Tidak bisa diperkirakan dari kode saja: ukur dengan trafik nyata' }
+}
+
+/** Milidetik ringkas: 0,4 md · 120 md · 2,5 dtk. */
+export const fmtMs = (v: number) => v >= 1000
+  ? `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(v / 1000)} dtk`
+  : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: v < 10 ? 1 : 0 }).format(v)} md`
+
+/** Angka kapasitas ringkas: 1.250 · 12 rb · 1,2 jt. */
+export const fmtCount = (v: number) => new Intl.NumberFormat('id-ID', { notation: v >= 10000 ? 'compact' : 'standard', maximumFractionDigits: v < 10 ? 2 : v < 100 ? 1 : 0 }).format(v)
