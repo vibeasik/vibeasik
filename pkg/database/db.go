@@ -294,7 +294,7 @@ func ensureDefaultLLMConfigs(db *gorm.DB) {
 			Provider:      models.ProviderSystemOne,
 			Name:          "Laya Local 2",
 			URL:           "http://192.168.1.9:8750/v1/systemone",
-			Key:           "sk-laya-systemone-local",
+			Key:           "",
 			Models:        "[\"laya\"]",
 			SelectedModel: "laya",
 			IsActive:      false,

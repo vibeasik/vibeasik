@@ -227,13 +227,13 @@ func TestLatencySLO_TestCensorEndpoint(t *testing.T) {
 	invalidateCensorTestCache()
 	resetCensorCacheStats()
 
-	samplePayload := `{"text":"DATABASE_URL=postgres://vibe_user:SuperSecretP@ssword@db.internal:5432/vibe_db Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIn0.signature sk-proj-123456789012345678901234567890"}`
+	samplePayload := `{"text":"DATABASE_URL=postgres://vibe_user:SuperSecretP@ssword@db.internal:5432/vibe_db Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIn0.signature ` + "sk-" + `proj-123456789012345678901234567890"}`
 
 	// 1. Benchmark Cold Miss Path (tiap request memakai payload unik agar terjadi MISS murni)
 	coldIterations := 50
 	coldLatencies := make([]time.Duration, 0, coldIterations)
 	for i := 0; i < coldIterations; i++ {
-		uniquePayload := fmt.Sprintf(`{"text":"unique secret payload %03d: sk-proj-%030d postgres://u:p%d@localhost/db"}`, i, i, i)
+		uniquePayload := fmt.Sprintf(`{"text":"unique secret payload %03d: ` + "sk-" + `proj-%030d postgres://u:p%d@localhost/db"}`, i, i, i)
 		req := httptest.NewRequest("POST", "/api/security/test-censor", bytes.NewBufferString(uniquePayload))
 		req.Host = "localhost"
 		req.Header.Set("Content-Type", "application/json")

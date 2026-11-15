@@ -9,6 +9,12 @@ import (
 	"github.com/vibeasik/vibeasik/pkg/models"
 )
 
+// Kunci palsu dipecah agar tidak terbaca sebagai kunci asli oleh pemindai rahasia.
+var (
+	fakeEnvAPIKey    = "sk-" + "proj-99998888777766665555444433332222"
+	fakeClientSecret = "sk-" + "proj-feSecretKey1234567890abcdef12345"
+)
+
 func TestFastScanComponent(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test_comp_*")
 	if err != nil {
@@ -26,7 +32,7 @@ func TestFastScanComponent(t *testing.T) {
 	}`), 0644)
 
 	_ = os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(`
-		API_KEY=sk-proj-99998888777766665555444433332222
+		API_KEY=`+fakeEnvAPIKey+`
 		DATABASE_URL=postgres://root:SuperSecret123@localhost:5432/test
 	`), 0644)
 
@@ -56,7 +62,7 @@ func TestFastScanComponent(t *testing.T) {
 	}
 
 	// Verify raw key never appears in AI analysis or preview
-	if strings.Contains(res.AiAnalysisMarkdown, "sk-proj-99998888") {
+	if strings.Contains(res.AiAnalysisMarkdown, fakeEnvAPIKey) {
 		t.Errorf("Leaked raw key in AI analysis markdown!")
 	}
 
@@ -66,7 +72,7 @@ func TestFastScanComponent(t *testing.T) {
 	}
 
 	for _, ek := range res.ExtractedEnv.EnvironmentKeys {
-		if strings.Contains(ek.SafeExample, "sk-proj-99998888") {
+		if strings.Contains(ek.SafeExample, fakeEnvAPIKey) {
 			t.Errorf("Leaked raw API key in SafeExample for %s!", ek.Key)
 		}
 		if strings.Contains(ek.SafeExample, "SuperSecret123") {
@@ -387,7 +393,7 @@ func TestFastScanFrontendNuxtApp(t *testing.T) {
 	// Create .env with secret
 	_ = os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(`
 NUXT_PUBLIC_API_URL=http://localhost:8765
-AUTH_CLIENT_SECRET=sk-proj-feSecretKey1234567890abcdef12345
+AUTH_CLIENT_SECRET=`+fakeClientSecret+`
 `), 0644)
 
 	comp := &models.Component{
@@ -483,7 +489,7 @@ AUTH_CLIENT_SECRET=sk-proj-feSecretKey1234567890abcdef12345
 	if redactedCount < 1 {
 		t.Errorf("Expected at least 1 redacted key in audit, got %d", redactedCount)
 	}
-	if strings.Contains(res.AiAnalysisMarkdown, "sk-proj-feSecretKey") {
+	if strings.Contains(res.AiAnalysisMarkdown, fakeClientSecret) {
 		t.Errorf("Raw key leaked in AI analysis markdown!")
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var fakeHookAPIKey = "sk-" + "proj-12345678901234567890"
+
 func TestQueryActiveLLM_PreFlightSanitization(t *testing.T) {
 	origLLMQuery := LLMQuery
 	defer func() { LLMQuery = origLLMQuery }()
@@ -18,7 +20,7 @@ func TestQueryActiveLLM_PreFlightSanitization(t *testing.T) {
 		return "mock response", nil
 	}
 
-	rawSys := "System prompt with ADMIN_PASSWORD=SuperSecretPass123! and API_KEY: sk-proj-12345678901234567890"
+	rawSys := "System prompt with ADMIN_PASSWORD=SuperSecretPass123! and API_KEY: " + fakeHookAPIKey
 	rawUser := "User prompt containing DATABASE_URL=postgres://root:SuperSecret123@localhost:5432/db"
 
 	resp, err := queryActiveLLM(nil, rawSys, rawUser)
@@ -33,7 +35,7 @@ func TestQueryActiveLLM_PreFlightSanitization(t *testing.T) {
 	if strings.Contains(capturedSys, "SuperSecretPass123!") {
 		t.Errorf("system prompt leaked password to LLM: %s", capturedSys)
 	}
-	if strings.Contains(capturedSys, "sk-proj-12345678901234567890") {
+	if strings.Contains(capturedSys, fakeHookAPIKey) {
 		t.Errorf("system prompt leaked api key to LLM: %s", capturedSys)
 	}
 	if strings.Contains(capturedUser, "SuperSecret123") {

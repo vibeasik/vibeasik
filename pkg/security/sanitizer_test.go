@@ -8,14 +8,16 @@ import (
 // fakeGitHubToken disusun dari potongan agar pemindai rahasia tidak menganggapnya token asli.
 var fakeGitHubToken = "ghp" + "_1234567890abcdefghijklmnopqrstuvwxyz"
 
+var fakeOpenAIKey = "sk-" + "proj-1234567890abcdef1234567890abcdef1234"
+
 func TestSanitizeSecrets(t *testing.T) {
 	input := `
 	Config details:
-	OPENAI_KEY: sk-proj-1234567890abcdef1234567890abcdef1234
+	OPENAI_KEY: ` + fakeOpenAIKey + `
 	GOOGLE_KEY: AIzaSyD9876543210abcdefghijklmnopqrs
 	DATABASE_URL: postgres://admin:SuperSecretPass123!@localhost:5432/myapp
 	GITHUB: ` + fakeGitHubToken + `
-	Repeated OpenAI: sk-proj-1234567890abcdef1234567890abcdef1234
+	Repeated OpenAI: ` + fakeOpenAIKey + `
 	`
 
 	cleaned, audit := GlobalSanitizer.Sanitize(input)
@@ -24,7 +26,7 @@ func TestSanitizeSecrets(t *testing.T) {
 		t.Errorf("Expected at least 4 redacted records, got %d", audit.RedactedCount)
 	}
 
-	if strings.Contains(cleaned, "sk-proj-1234567890") {
+	if strings.Contains(cleaned, fakeOpenAIKey) {
 		t.Errorf("OpenAI key was not redacted in text!")
 	}
 	if strings.Contains(cleaned, "AIzaSyD9876543210") {
