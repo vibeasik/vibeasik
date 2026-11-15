@@ -349,10 +349,12 @@ func (c *costCtx) bindParams(sc *fnScope, ce *ast.CallExpr, callee cst) cst {
 	switch {
 	case d&drvDB != 0:
 		callee.ticks, callee.queries = callee.ticks.bindParams(true), callee.queries.bindParams(true)
+		callee.io = mapIO(callee.io, func(p poly) poly { return p.bindParams(true) })
 		callee.drv |= drvDB
 	case d&drvParam != 0: // diteruskan dari parameter pemanggil: baru diketahui di pemanggil berikutnya
 	default:
 		callee.ticks, callee.queries = callee.ticks.bindParams(false), callee.queries.bindParams(false)
+		callee.io = mapIO(callee.io, func(p poly) poly { return p.bindParams(false) })
 	}
 	return callee
 }

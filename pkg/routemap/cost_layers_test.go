@@ -321,3 +321,54 @@ func TestRouteOp(t *testing.T) {
 		}
 	}
 }
+
+// I/O selain query dihitung per jenis: menjalankan proses dan panggilan HTTP keluar jauh lebih mahal dari satu query.
+func TestIOKindsAreCountedSeparately(t *testing.T) {
+	root := writeTree(t, map[string]string{"go.mod": "module demo\n\ngo 1.22\n", "main.go": `package main
+
+import (
+	"net/http"
+	"os"
+	"os/exec"
+
+	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
+)
+
+var db *gorm.DB
+
+type Row struct{ ID uint }
+
+func main() {
+	app := fiber.New()
+	app.Get("/tools", tools)
+}
+
+func tools(c *fiber.Ctx) error {
+	var rows []Row
+	db.Find(&rows)
+	out, _ := exec.Command("git", "--version").Output()
+	resp, _ := http.Get("https://example.com/status")
+	_ = resp
+	b, _ := os.ReadFile("VERSION")
+	for _, r := range rows {
+		_, _ = os.ReadFile("notes/" + string(rune(r.ID)))
+	}
+	return c.JSON(fiber.Map{"git": string(out), "version": string(b)})
+}
+`})
+	for _, r := range Costs(Analyze(root)).Routes {
+		if r.Path != "/tools" {
+			continue
+		}
+		io := r.EstimateIO(100, 20)
+		if io.DB != 1 || io.Exec != 1 || io.Net != 1 || io.File != 101 {
+			t.Errorf("I/O per jenis pada 100 baris: %+v", io)
+		}
+		if r.IO1["exec"] != 1 || r.IO1["http"] != 1 || r.IO1["file"] != 2 {
+			t.Errorf("IO1: %v", r.IO1)
+		}
+		return
+	}
+	t.Fatal("rute /tools tidak ditemukan")
+}

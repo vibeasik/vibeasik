@@ -20,12 +20,17 @@ const (
 	ioMail
 	ioQueue
 	ioGoroutine
+	ioExec // menjalankan proses lain (os/exec)
 )
+
+// ioSlow: I/O selain query database yang harganya jauh berbeda dari satu query (berkas ±puluhan µs, HTTP keluar &
+// proses lain ±puluhan–ratusan ms) — jumlahnya dihitung terpisah per jenis untuk proyeksi beban.
+const ioSlow = ioHTTP | ioFile | ioMail | ioQueue | ioExec
 
 var ioKindNames = []struct {
 	k    ioKind
 	name string
-}{{ioQuery, "query"}, {ioHTTP, "http"}, {ioFile, "file"}, {ioMail, "mail"}, {ioQueue, "queue"}, {ioGoroutine, "goroutine"}}
+}{{ioQuery, "query"}, {ioHTTP, "http"}, {ioFile, "file"}, {ioMail, "mail"}, {ioQueue, "queue"}, {ioGoroutine, "goroutine"}, {ioExec, "exec"}}
 
 func (k ioKind) names() []string {
 	var out []string
@@ -40,7 +45,7 @@ func (k ioKind) names() []string {
 // IOLabels: nama jenis I/O untuk pengguna (Indonesia), urut seperti IOKinds.
 func IOLabels(kinds []string) []string {
 	label := map[string]string{"query": "query database", "http": "panggilan HTTP", "file": "akses berkas",
-		"mail": "kirim email", "queue": "antrean/pubsub", "goroutine": "goroutine per item"}
+		"mail": "kirim email", "queue": "antrean/pubsub", "goroutine": "goroutine per item", "exec": "jalankan proses"}
 	out := make([]string, 0, len(kinds))
 	for _, k := range kinds {
 		if l, ok := label[k]; ok {
@@ -70,6 +75,7 @@ var ioPkgFuncs = map[string]ioKind{
 	"filepath.Walk": ioFile, "filepath.WalkDir": ioFile, "filepath.Glob": ioFile,
 	"http.Get": ioHTTP, "http.Post": ioHTTP, "http.Head": ioHTTP, "http.PostForm": ioHTTP,
 	"smtp.SendMail": ioMail,
+	"exec.Command":  ioExec, "exec.CommandContext": ioExec,
 }
 
 var (

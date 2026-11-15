@@ -252,6 +252,9 @@ type cst struct {
 	// kinds: jenis operasi I/O yang dijalankan (ioQuery, ioHTTP, …); loopKinds: yang dijalankan di dalam loop atas
 	// data (per item) — dasar label temuan "I/O per item".
 	kinds, loopKinds ioKind
+	// io: jumlah operasi I/O selain query database, per jenis (lihat ioSlow). queries tetap memuat SEMUA operasi
+	// I/O (dasar temuan "I/O per item"); query database murni = queries − jumlah io.
+	io map[ioKind]poly
 	// lex: kedalaman loop atas data yang DITULIS di badan fungsi ini sendiri (tanpa fungsi terpanggil). Pangkat
 	// yang lebih tinggi dari lex berasal dari perkalian lintas fungsi — tiap tingkat biasanya koleksi berbeda.
 	lex int
@@ -273,6 +276,15 @@ func (c *cst) add(o cst) {
 	c.kinds |= o.kinds
 	c.loopKinds |= o.loopKinds
 	c.drv |= o.drv
+	for k, p := range o.io {
+		if c.io == nil {
+			c.io = map[ioKind]poly{}
+		}
+		if c.io[k] == nil {
+			c.io[k] = poly{}
+		}
+		c.io[k].add(p)
+	}
 	if o.depth > c.depth {
 		c.depth = o.depth
 	}
@@ -284,7 +296,8 @@ func (c *cst) add(o cst) {
 // scaled = biaya dikalikan k·n^dn·(log n)^dl (isi loop).
 func (c cst) scaled(k int64, dn, dl int) cst {
 	out := cst{ticks: c.ticks.times(k, dn, dl), queries: c.queries.times(k, dn, dl), recursive: c.recursive, unbounded: c.unbounded, depth: c.depth,
-		search: c.search, avoid: c.avoid, kinds: c.kinds, loopKinds: c.loopKinds, lex: c.lex, drv: c.drv}
+		search: c.search, avoid: c.avoid, kinds: c.kinds, loopKinds: c.loopKinds, lex: c.lex, drv: c.drv,
+		io: mapIO(c.io, func(p poly) poly { return p.times(k, dn, dl) })}
 	if dn > 0 {
 		out.depth += dn
 		out.lex += dn
@@ -292,10 +305,38 @@ func (c cst) scaled(k int64, dn, dl int) cst {
 	return out
 }
 
+// mapIO menerapkan f ke polinom tiap jenis I/O (salinan baru; nil tetap nil).
+func mapIO(in map[ioKind]poly, f func(poly) poly) map[ioKind]poly {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[ioKind]poly, len(in))
+	for k, p := range in {
+		out[k] = f(p)
+	}
+	return out
+}
+
+// addIO mencatat satu operasi I/O jenis k: selalu masuk queries; jenis selain query juga dihitung per jenis.
+func (c *cst) addIO(k ioKind) {
+	c.queries.addTerm(term{}, 1)
+	c.kinds |= k
+	if k&ioSlow != 0 {
+		if c.io == nil {
+			c.io = map[ioKind]poly{}
+		}
+		if c.io[k] == nil {
+			c.io[k] = poly{}
+		}
+		c.io[k].addTerm(term{}, 1)
+	}
+}
+
 // scaledLoop = isi satu tingkat loop atas data yang asalnya drv, dikalikan n·(log n)^dl.
 func (c cst) scaledLoop(drv driver, dl int) cst {
 	out := c.scaled(1, 1, dl)
 	out.ticks, out.queries = c.ticks.timesLoop(drv, dl), c.queries.timesLoop(drv, dl)
+	out.io = mapIO(c.io, func(p poly) poly { return p.timesLoop(drv, dl) })
 	out.drv |= drv
 	return out
 }
@@ -303,7 +344,17 @@ func (c cst) scaledLoop(drv driver, dl int) cst {
 // heavier: cabang mana yang lebih mahal untuk n besar (kasus terburuk if/switch).
 func heavier(a, b cst) cst {
 	const probe = 1e6
-	av, bv := a.ticks.eval(probe)+a.queries.eval(probe)*1e3, b.ticks.eval(probe)+b.queries.eval(probe)*1e3
+	// Panggilan keluar & proses lain jauh lebih mahal dari query: cabang yang memuatnya dianggap lebih berat.
+	slow := func(c cst) float64 {
+		sum := 0.0
+		for k, p := range c.io {
+			if k != ioFile {
+				sum += p.eval(probe)
+			}
+		}
+		return sum * 1e5
+	}
+	av, bv := a.ticks.eval(probe)+a.queries.eval(probe)*1e3+slow(a), b.ticks.eval(probe)+b.queries.eval(probe)*1e3+slow(b)
 	w, l := a, b
 	if bv > av {
 		w, l = b, a
@@ -715,8 +766,7 @@ func (c *costCtx) call(sc *fnScope, ce *ast.CallExpr, out *cst) bool {
 		// I/O di luar database (HTTP keluar, berkas, email, antrean/pubsub) dihitung seperti query: satu operasi
 		// I/O per pemanggilan, sehingga yang dijalankan per item di loop data dilaporkan sebagai I/O per item.
 		if k := ioCallKind(sel); k != 0 {
-			out.queries.addTerm(term{}, 1)
-			out.kinds |= k
+			out.addIO(k)
 		}
 	}
 	return c.registeredArgs(sc, ce, out)
@@ -864,8 +914,11 @@ type Cost struct {
 	Loose   bool `json:"loose,omitempty"`
 	rank    float64
 	qDegree int // pangkat n tertinggi pada Q(n)
-	// ticks/queries: polinomnya sendiri, untuk Estimate (proyeksi beban).
+	// IO1: jumlah operasi I/O selain query database untuk 1 data, per jenis (file, http, mail, queue, exec).
+	IO1 map[string]int64 `json:"io_1,omitempty"`
+	// ticks/queries/io: polinomnya sendiri, untuk Estimate (proyeksi beban).
 	ticks, queries poly
+	io             map[ioKind]poly
 }
 
 // maxSmallLevels: paling banyak sekian tingkat koleksi kecil yang dikalikan pada perkiraan. Tingkat yang lebih
@@ -901,6 +954,28 @@ func (p poly) dataDegree() (deg int, loose bool) {
 	return deg, loose
 }
 
+// IOEstimate = perkiraan jumlah operasi I/O per jenis: DB = query database murni; File = akses berkas;
+// Net = panggilan keluar (HTTP, email, antrean); Exec = menjalankan proses lain.
+type IOEstimate struct{ DB, File, Net, Exec float64 }
+
+// EstimateIO memecah Q(n) menurut jenis I/O untuk n baris data (lihat Estimate).
+func (c Cost) EstimateIO(n, m float64) IOEstimate {
+	var e IOEstimate
+	for k, p := range c.io {
+		v := evalMixed(p, n, m)
+		switch k {
+		case ioFile:
+			e.File += v
+		case ioExec:
+			e.Exec += v
+		default:
+			e.Net += v
+		}
+	}
+	e.DB = math.Max(0, evalMixed(c.queries, n, m)-e.File-e.Net-e.Exec)
+	return e
+}
+
 // Estimate = perkiraan tick & query untuk n baris data tersimpan, dengan koleksi lain (halaman, isi permintaan,
 // memori) berukuran m. Bandingkan dengan Growth, yang memakai kasus terburuk seragam (semua tingkat n).
 func (c Cost) Estimate(n, m float64) (ticks, queries float64) {
@@ -926,7 +1001,17 @@ func (c cst) export() Cost {
 		out.Growth = append(out.Growth, GrowthPoint{N: n, Ticks: c.ticks.eval(float64(n)), Queries: c.queries.eval(float64(n))})
 	}
 	out.rank = c.ticks.eval(1e4) + c.queries.eval(1e4)*1e3
-	out.ticks, out.queries = c.ticks, c.queries
+	out.ticks, out.queries, out.io = c.ticks, c.queries, c.io
+	for _, n := range ioKindNames {
+		if p := c.io[n.k]; p != nil {
+			if v := int64(p.eval(1)); v > 0 {
+				if out.IO1 == nil {
+					out.IO1 = map[string]int64{}
+				}
+				out.IO1[n.name] = v
+			}
+		}
+	}
 	out.OwnDepth = c.lex
 	out.Composed = out.Degree >= 2 && out.Degree > c.lex
 	out.Drivers, out.Scale = c.drv.names(), c.drv.scale(out.Degree > 0 || out.NPlusOne)
