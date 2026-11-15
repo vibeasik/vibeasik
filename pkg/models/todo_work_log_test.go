@@ -3,6 +3,7 @@ package models
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -52,5 +53,37 @@ func TestTodoWorkLogKeepsEveryAttempt(t *testing.T) {
 	}
 	if TodoWorkSummary(db, 999, 5) != "" {
 		t.Fatal("todo tanpa riwayat harus kosong")
+	}
+}
+
+func TestBackfillTodoWorkLogsFromOldData(t *testing.T) {
+	db := workLogDB(t)
+	done := time.Date(2026, 11, 2, 21, 28, 0, 0, time.Local)
+	old := Todo{Title: "lama", Status: TodoStatusCompleted, CompletedAt: &done, CompletedByAgent: "Claude Code", CompletedByModel: "m9",
+		Rationale: "Analisis.\n\nCatatan penyelesaian (Antigravity, 1 Nov 2026 04:05): gagal.\n\nCatatan penyelesaian (agent, 2 Nov 2026 21:27): beres."}
+	plain := Todo{Title: "tanpa catatan", Status: TodoStatusCompleted, CompletedAt: &done, CompletedByAgent: "developer"}
+	pending := Todo{Title: "belum"}
+	logged := Todo{Title: "sudah punya riwayat", Status: TodoStatusCompleted, CompletedAt: &done}
+	for _, x := range []*Todo{&old, &plain, &pending, &logged} {
+		db.Create(x)
+	}
+	RecordTodoWork(db, logged.ID, TodoWorkCompleted, "Codex", "", TodoWorkViaMCP)
+
+	if n := BackfillTodoWorkLogs(db); n != 3 {
+		t.Fatalf("baris terisi = %d, mau 3", n)
+	}
+	if n := BackfillTodoWorkLogs(db); n != 0 {
+		t.Fatalf("pengisian kedua harus kosong, dapat %d", n)
+	}
+	logs := TodoWorkLogs(db, old.ID)
+	if len(logs) != 2 || logs[0].Agent != "Antigravity" || logs[0].CreatedAt.Day() != 1 ||
+		logs[1].Agent != "Claude Code" || logs[1].Model != "m9" || !logs[1].CreatedAt.Equal(done) || logs[1].Via != TodoWorkViaBackfill {
+		t.Fatalf("riwayat todo lama = %+v", logs)
+	}
+	if l := TodoWorkLogs(db, plain.ID); len(l) != 1 || l[0].Agent != "developer" {
+		t.Fatalf("todo tanpa catatan = %+v", l)
+	}
+	if len(TodoWorkLogs(db, pending.ID)) != 0 || len(TodoWorkLogs(db, logged.ID)) != 1 {
+		t.Fatal("todo belum dikerjakan / sudah punya riwayat tidak boleh disentuh")
 	}
 }

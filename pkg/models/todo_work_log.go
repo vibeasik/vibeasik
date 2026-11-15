@@ -128,3 +128,59 @@ func TodoWorkSummary(db *gorm.DB, todoID uint, max int) string {
 	}
 	return b.String()
 }
+
+// TodoWorkViaBackfill menandai baris yang disusun dari data lama (sebelum riwayat dicatat langsung).
+const TodoWorkViaBackfill = "backfill"
+
+// BackfillTodoWorkLogs mengisi riwayat todo yang dikerjakan sebelum riwayat dicatat: satu baris "selesai"
+// per catatan penyelesaian di Rationale (siapa, kapan), ditambah penyelesaian terakhir dari completed_at /
+// completed_by_agent bila belum terwakili. Waktu mulai tidak pernah disimpan, jadi tidak dikarang.
+// Hanya menyentuh todo yang belum punya riwayat sama sekali, sehingga aman dijalankan tiap engine menyala.
+func BackfillTodoWorkLogs(db *gorm.DB) int {
+	var todos []Todo
+	db.Select("id", "project_id", "employee_name", "status", "rationale", "completed_at", "completed_by_agent", "completed_by_model").
+		Where("(completed_at IS NOT NULL OR rationale LIKE ?) AND id NOT IN (?)", "%"+completionNoteMark+"%",
+			db.Model(&TodoWorkLog{}).Select("todo_id")).
+		Find(&todos)
+	var rows []TodoWorkLog
+	for _, t := range todos {
+		rows = append(rows, backfillRows(t)...)
+	}
+	if len(rows) == 0 {
+		return 0
+	}
+	if err := db.CreateInBatches(rows, 200).Error; err != nil {
+		return 0
+	}
+	return len(rows)
+}
+
+// backfillRows menyusun baris riwayat satu todo lama, urut waktu.
+func backfillRows(t Todo) []TodoWorkLog {
+	row := func(at time.Time, agent, model string) TodoWorkLog {
+		return TodoWorkLog{TodoID: t.ID, ProjectID: t.ProjectID, Event: TodoWorkCompleted, Agent: clipRunes(agent, 128), Model: clipRunes(model, 128),
+			EmployeeName: t.EmployeeName, Via: TodoWorkViaBackfill, CreatedAt: at}
+	}
+	var rows []TodoWorkLog
+	_, notes := SplitRationale(t.Rationale)
+	for _, n := range notes {
+		if at, err := time.ParseInLocation("2 Jan 2006 15:04", n.When, time.Local); err == nil {
+			rows = append(rows, row(at, n.Who, ""))
+		}
+	}
+	if t.Status != TodoStatusCompleted || t.CompletedAt == nil {
+		return rows
+	}
+	// Catatan penyelesaian terakhir biasanya ditulis bersamaan dengan penyelesaian itu sendiri: satukan.
+	if n := len(rows); n > 0 {
+		if d := t.CompletedAt.Sub(rows[n-1].CreatedAt); d > -10*time.Minute && d < 10*time.Minute {
+			rows[n-1].CreatedAt = *t.CompletedAt
+			if t.CompletedByAgent != "" {
+				rows[n-1].Agent = t.CompletedByAgent
+			}
+			rows[n-1].Model = t.CompletedByModel
+			return rows
+		}
+	}
+	return append(rows, row(*t.CompletedAt, t.CompletedByAgent, t.CompletedByModel))
+}

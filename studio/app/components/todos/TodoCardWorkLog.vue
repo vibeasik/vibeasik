@@ -25,7 +25,8 @@ const viaLabel: Record<string, string> = {
   mcp: 'lewat MCP',
   studio: 'lewat Studio',
   orchestrator: 'dikirim engine',
-  review: 'hasil pemeriksaan'
+  review: 'hasil pemeriksaan',
+  backfill: 'dari data lama'
 }
 const metaOf = (event: string) => eventMeta[event] ?? { label: event, icon: 'i-lucide-circle', dot: 'bg-neutral-400' }
 

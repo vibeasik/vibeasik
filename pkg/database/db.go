@@ -464,6 +464,10 @@ func ensureDefaultTodos(db *gorm.DB) {
 	db.Model(&models.Todo{}).Where("level = '' OR level IS NULL").Update("level", models.TodoLevelGlobal)
 	db.Model(&models.Todo{}).Where("creator_type = '' OR creator_type IS NULL").Update("creator_type", models.CreatorHuman)
 	db.Model(&models.Todo{}).Where("creator_name = '' OR creator_name IS NULL").Update("creator_name", "developer")
+	// Todo yang selesai sebelum riwayat pengerjaan dicatat: isi dari catatan penyelesaian & kolom penyelesaiannya.
+	if n := models.BackfillTodoWorkLogs(db); n > 0 {
+		log.Printf("[DB] riwayat pengerjaan todo lama diisi: %d baris", n)
+	}
 
 	// Backfill category for existing todos
 	// Klasifikasi dilakukan di Go (satu pembacaan, lalu update per baris) agar tidak memakai
