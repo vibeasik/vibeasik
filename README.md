@@ -7,7 +7,7 @@
 [English summary](README.en.md) · [Mulai cepat](docs/GETTING_STARTED.md) · [MCP](docs/MCP.md) · [Edisi & paket](docs/EDITIONS.md) · [Arsitektur](docs/ARCHITECTURE.md)
 
 vibeasik adalah program lokal untuk **vibecoder**, yaitu orang yang membangun software bersama agent AI.
-Ia mencatat semua proyek Anda, mengaudit kode hasil AI dengan **85 rule bawaan**, mengatur port & dev server agar tidak
+Ia mencatat semua proyek Anda, mengaudit kode hasil AI dengan **86 rule bawaan**, mengatur port & dev server agar tidak
 bentrok, membuat peta kode, dan menjadi **server MCP** sehingga Claude Code, Cursor, Antigravity, dan agent lain
 bisa memakai semua itu.
 
@@ -46,7 +46,7 @@ Panduan lengkap, termasuk memindai proyek pertama: [docs/GETTING_STARTED.md](doc
 | Fitur | Perintah / tempat |
 |---|---|
 | Mengenali proyek dan komponennya (backend, frontend, stack, port, perintah dev) | `vibeasik scan <folder>`, `vibeasik list`, Studio |
-| Audit kode dengan 85 rule dalam 12 kategori | `vibeasik rules`, `vibeasik diagnose`, Studio |
+| Audit kode dengan 86 rule dalam 12 kategori | `vibeasik rules`, `vibeasik diagnose`, Studio |
 | Port registry tanpa bentrok antarproyek | `vibeasik ports` |
 | Peta kode dan rute | Studio |
 | Daftar todo per proyek | MCP, Studio |
@@ -57,7 +57,7 @@ Panduan lengkap, termasuk memindai proyek pertama: [docs/GETTING_STARTED.md](doc
 
 | | Community (gratis) | Pro (langganan) |
 |---|---|---|
-| Scan proyek, 85 rule audit, port & runner, peta kode, todo | ✓ | ✓ |
+| Scan proyek, 86 rule audit, port & runner, peta kode, todo | ✓ | ✓ |
 | Pusat Pengetahuan (paket dasar; kirim otomatis terkunci) | ✓ | ✓ jaring lengkap; kirim otomatis dapat diubah |
 | MCP | 64 tool | 123 tool |
 | Deep audit, AI review, pegawai AI, orkestrator, Galeri Desain, … | terkunci | ✓ |

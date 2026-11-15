@@ -11,7 +11,7 @@ Untuk kontributor dan siapa pun yang ingin memahami isi repo.
  │                 │              │                                                          │
  │            pkg/registry  (modul, gate fitur, hook)   pkg/localauth (token, Host check)    │
  │                 │                                                                         │
- │  scanner · analysis · guidelines(85 rule) · runner · codemap · routemap · todorag          │
+ │  scanner · analysis · guidelines(86 rule) · runner · codemap · routemap · todorag          │
  │  knowledge · knowledgesync · account · security(sanitizer) · database (SQLite/MySQL)      │
  └───────────────────────────────────────────────────────────────────────────────────────────┘
                     │ HTTPS (opsional): login, entitlement, paket pengetahuan
@@ -30,7 +30,7 @@ Untuk kontributor dan siapa pun yang ingin memahami isi repo.
 | `localauth` | Token lokal `~/.vibeasik/token`, cookie sesi Studio |
 | `account` | Login device flow, entitlement bertanda Ed25519, pembaruan latar belakang |
 | `scanner`, `analysis`, `diagnostics` | Mengenali stack proyek dan memeriksanya |
-| `guidelines` | 85 rule audit (`guidelines/*.json` di-embed) |
+| `guidelines` | 86 rule audit (`guidelines/*.json` di-embed) |
 | `runner`, `workspace` | Dev server proyek, port registry |
 | `codemap`, `routemap`, `codectx` | Peta kode dan rute untuk konteks agent |
 | `knowledge`, `knowledgesync` | Basis pengetahuan lokal; tarik paket, sinyal, dan usulan |

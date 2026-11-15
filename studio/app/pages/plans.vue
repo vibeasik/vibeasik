@@ -12,7 +12,7 @@ const isPro = computed(() => Boolean(account.value?.logged_in && account.value.p
 // Fitur yang ada di kedua paket.
 const freeFeatures = [
   'Scan proyek & katalog stack',
-  '85 rule audit',
+  '86 rule audit',
   'Port & runner, monitor port bentrok',
   'Peta kode (indeks untuk agent AI)',
   'Todo & perencanaan',

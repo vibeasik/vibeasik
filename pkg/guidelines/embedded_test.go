@@ -14,7 +14,7 @@ func TestLoadEmbeddedGuidelines(t *testing.T) {
 	for _, c := range cats {
 		rules += len(c.Guidelines)
 	}
-	if rules < 85 {
-		t.Fatalf("want >= 85 embedded rules, got %d", rules)
+	if rules < 86 {
+		t.Fatalf("want >= 86 embedded rules, got %d", rules)
 	}
 }

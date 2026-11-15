@@ -52,7 +52,7 @@ vibeasik open
 vibeasik scan ~/proyek/toko-saya        # tampilkan komponen yang terdeteksi: backend, frontend, stack
 vibeasik list                           # daftar proyek yang sudah tercatat
 vibeasik diagnose ~/proyek/toko-saya    # pemeriksaan kesehatan dan arsitektur
-vibeasik rules                          # 85 rule audit bawaan per kategori
+vibeasik rules                          # 86 rule audit bawaan per kategori
 ```
 
 Menambahkan proyek ke daftar, melihat temuan audit, peta kode, dan todo paling nyaman lewat Studio atau lewat agent

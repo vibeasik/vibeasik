@@ -35,7 +35,7 @@ Berdasarkan data wawancara dan eksekusi pilot pada 4 calon pelanggan (`docs/SERV
 
 | Segmen Pelanggan | Kebutuhan Inti | Fitur yang Paling Sering Digunakan | Frekuensi Rata-Rata | Keberatan Terbesar (*Objection*) |
 | :--- | :--- | :--- | :--- | :--- |
-| **FinTech Scale-up** (18 devs, Go) | Keamanan pre-ISO & mitigasi latensi DB | • Fast Scan (85 rule)<br>• Deep Check (N+1, deadlocks)<br>• QA Gate | 60–100 run audit / bulan | **Privasi Kode**: Menolak keras jika source code diunggah ke cloud luar. |
+| **FinTech Scale-up** (18 devs, Go) | Keamanan pre-ISO & mitigasi latensi DB | • Fast Scan (86 rule)<br>• Deep Check (N+1, deadlocks)<br>• QA Gate | 60–100 run audit / bulan | **Privasi Kode**: Menolak keras jika source code diunggah ke cloud luar. |
 | **B2B SaaS HRIS** (8 devs, Nuxt/Node) | Standarisasi kualitas tim junior | • Pegawai AI (Staff Office)<br>• AI PR Review<br>• Galeri Desain UI | 150–220 PR review & task / bulan | **Kualitas**: Khawatir AI menghasilkan kode halusinasi/*AI slop*. |
 | **Software Agensi** (12 devs, 15+ repo) | Onboarding audit intake proyek baru | • Fast Scan<br>• Topologi Code Map<br>• Ekspor Health Score | 20–35 audit repo / bulan | **Kecepatan**: Turnaround harus di bawah 24 jam. |
 | **E-Commerce Scale-up** (25 devs, Monorepo) | Performa database event promo besar | • Deep Check DB query<br>• Remediation Sprint | 50–80 deep runs / bulan | **Stabilitas**: Takut refactoring merusak logika transaksi stabil. |

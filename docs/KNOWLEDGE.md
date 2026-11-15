@@ -107,7 +107,7 @@ kiriman yang belum terbit (`vibeasik knowledge revoke`). Data terbit tidak memua
 |---|---|---|
 | **Paket gratis** | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | Boleh disalin, dibagikan, dan diubah, termasuk untuk komersial. Wajib menyebut "vibeasik Pusat Pengetahuan", menautkan lisensi, dan menyatakan perubahan |
 | **Paket penuh** (Pro) | [Lisensi Pengetahuan vibeasik 1.0](https://vibeasik.com/legal/knowledge-license) | Hak cipta vibeasik. Boleh dipakai di komputer Anda untuk pekerjaan Anda; dilarang menerbitkan ulang, menjual, menyalin massal, atau memakainya untuk melatih model AI atau layanan yang bersaing |
-| **Kode vibeasik dan 85 rule audit** | Apache-2.0 | Terbuka penuh, seperti repositori ini |
+| **Kode vibeasik dan 86 rule audit** | Apache-2.0 | Terbuka penuh, seperti repositori ini |
 | **Isi yang Anda kirim** | Hak cipta tetap pada Anda | Anda memberi vibeasik lisensi luas (selamanya untuk bagian yang sudah terbit, boleh disublisensikan) untuk menerbitkannya dalam paket gratis maupun penuh |
 
 Lisensi tertulis di dalam berkas paket yang ditandatangani server, jadi tidak dapat diubah tanpa membatalkan tanda

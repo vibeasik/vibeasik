@@ -152,6 +152,16 @@
       "inspection_check": "Audit FE-DUPLICATE-IMPORT: import modul sama berulang dalam satu berkas JS/TS/Vue, dan nama ekspor kembar antar berkas composables/ & utils/ (root maupun app/).",
       "suggested_action": "Gabungkan import ke satu pernyataan; untuk auto-import kembar sisakan satu definisi atau ganti nama salah satunya dan perbarui pemanggilnya.",
       "severity": "medium"
+    },
+    {
+      "id": "FE-016",
+      "level": "component",
+      "title": "Mode Gelap & Terang Wajib (Dark/Light Theme)",
+      "rule": "Setiap website dan aplikasi web wajib menyediakan mode gelap dan mode terang: tombol ganti tema yang terlihat di header publik maupun dashboard, pilihan pengguna tersimpan (localStorage/cookie), dan tanpa pilihan tersimpan tema mengikuti prefers-color-scheme perangkat. Semua halaman harus terbaca di kedua mode (kontras teks WCAG AA).",
+      "rationale": "Pengguna memakai aplikasi di ruang terang maupun gelap; tanpa mode gelap layar menyilaukan di malam hari, dan tema yang ditambahkan belakangan memaksa ratusan berkas diubah satu per satu.",
+      "inspection_check": "Periksa konfigurasi tema (Tailwind darkMode 'class' / atribut data-theme / modul color-mode / variabel CSS per tema), keberadaan tombol ganti tema di layout publik dan dashboard, script inline di <head> yang memasang kelas tema sebelum render (anti-kilat), serta warna hex/inline style yang tidak ikut tema. Tidak ada satu pun dari itu = temuan.",
+      "suggested_action": "Petakan warna ke token/variabel CSS yang berganti pada <html class=\"dark\"> (latar, teks, dan garis dipetakan terpisah; latar gelap memakai abu sangat gelap, bukan #000), tambahkan tombol ganti tema di header, simpan pilihan di localStorage, dan pasang kelas tema lewat script sinkron di <head>.",
+      "severity": "high"
     }
   ]
 }

@@ -68,7 +68,7 @@ const moreItems = computed(() => [
           Audit &amp; Diagnostik
         </h2>
         <p class="text-sm text-neutral-600 dark:text-slate-400 max-w-2xl">
-          Temuan keamanan, arsitektur, API, dan kebersihan kode dari 85 rule, Deep Check (simulasi rute & kueri), dan review LLM.
+          Temuan keamanan, arsitektur, API, dan kebersihan kode dari 86 rule, Deep Check (simulasi rute & kueri), dan review LLM.
         </p>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-neutral-500 dark:text-slate-400">
           <button
@@ -114,7 +114,7 @@ const moreItems = computed(() => [
           <AppActionButton
             kind="scan"
             label="Audit standar"
-            desc="Audit statis cepat: port, konfigurasi, dan 85 rule standar"
+            desc="Audit statis cepat: port, konfigurasi, dan 86 rule standar"
             :loading="diagnosing"
             @click="emit('runAudit')"
           />
