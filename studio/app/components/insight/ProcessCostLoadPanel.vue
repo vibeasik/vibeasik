@@ -9,7 +9,9 @@ const props = defineProps<{ projectId: number, reloadKey?: string }>()
 
 const { getProcessCostProjection } = useApi()
 const STORE = 'vibeasik.processCost.loadForm'
-const form = reactive({ users: '10, 100, 1000, 10000', rows: '1000, 100000, 1000000', req_per_user_min: 6, cores: 2, db_conns: 20, tick_ns: 50, query_ms: 2, small_items: 20, budget_ms: 300 })
+// Harga tick & query kosong = pakai hasil kalibrasi bila ada, selain itu bawaan server.
+const form = reactive<{ users: string, rows: string, req_per_user_min: number, cores: number, db_conns: number, tick_ns: number | '', query_ms: number | '', small_items: number, budget_ms: number }>({ users: '10, 100, 1000, 10000', rows: '1000, 100000, 1000000', req_per_user_min: 6, cores: 2, db_conns: 20, tick_ns: '', query_ms: '', small_items: 20, budget_ms: 300 })
+const STORE_V = 2
 const more = ref(false)
 const data = shallowRef<LoadProjection | null>(null)
 const loading = ref(false)
@@ -22,9 +24,9 @@ const load = async () => {
   loading.value = true
   failed.value = ''
   try {
-    const res = await getProcessCostProjection(props.projectId, { ...form, users: form.users.replace(/\s/g, ''), rows: form.rows.replace(/\s/g, '') }, mine.signal)
+    const res = await getProcessCostProjection(props.projectId, { ...form, tick_ns: form.tick_ns || 0, query_ms: form.query_ms || 0, users: form.users.replace(/\s/g, ''), rows: form.rows.replace(/\s/g, '') }, mine.signal)
     if (ctl === mine) data.value = res
-    try { localStorage.setItem(STORE, JSON.stringify(form)) } catch { /* penyimpanan lokal tidak tersedia */ }
+    try { localStorage.setItem(STORE, JSON.stringify({ v: STORE_V, ...form })) } catch { /* penyimpanan lokal tidak tersedia */ }
   } catch (err: any) {
     if (mine.signal.aborted) return
     failed.value = err?.data?.error || err?.message || 'Gagal menghitung proyeksi beban'
@@ -33,7 +35,10 @@ const load = async () => {
   }
 }
 onMounted(() => {
-  try { Object.assign(form, JSON.parse(localStorage.getItem(STORE) || '{}')) } catch { /* abaikan isi yang rusak */ }
+  try {
+    const { v, ...saved } = JSON.parse(localStorage.getItem(STORE) || '{}')
+    if (v === STORE_V) Object.assign(form, saved) // isian versi lama (harga bawaan tersimpan) diabaikan
+  } catch { /* abaikan isi yang rusak */ }
   load()
 })
 watch(() => [props.projectId, props.reloadKey], load)
@@ -122,11 +127,11 @@ const th = 'font-medium px-3 py-2.5'
       <template v-if="more">
         <label :class="field" title="Harga satu tick (satu pernyataan) dalam nanodetik CPU">
           <span class="block">Tick (ns)</span>
-          <UInput v-model.number="form.tick_ns" type="number" min="1" step="any" size="sm" class="w-20" />
+          <UInput v-model.number="form.tick_ns" type="number" min="0" step="any" size="sm" class="w-24" :placeholder="String(data?.params.tick_ns ?? 50)" />
         </label>
         <label :class="field" title="Harga satu query berindeks dalam milidetik">
           <span class="block">Query (md)</span>
-          <UInput v-model.number="form.query_ms" type="number" min="0.1" step="any" size="sm" class="w-20" />
+          <UInput v-model.number="form.query_ms" type="number" min="0" step="any" size="sm" class="w-24" :placeholder="String(data?.params.query_ms ?? 2)" />
         </label>
         <label :class="field" title="Banyaknya putaran loop yang tidak memutari baris data: satu halaman, isi permintaan, koleksi di memori">
           <span class="block">Koleksi kecil</span>
@@ -149,6 +154,15 @@ const th = 'font-medium px-3 py-2.5'
     <div v-else-if="!data" class="h-40 rounded-xl border border-neutral-200 dark:border-white/[0.08] animate-pulse" />
 
     <template v-else>
+      <p class="flex items-start gap-1.5 text-xs" :class="data.calibration.applied ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500'">
+        <UIcon :name="data.calibration.applied ? 'i-lucide-ruler' : 'i-lucide-ruler-dimension-line'" class="size-3.5 mt-0.5 shrink-0" />
+        <span>
+          <strong class="font-semibold">Kalibrasi {{ data.calibration.applied ? 'dipakai' : 'belum dipakai' }}.</strong>
+          {{ data.calibration.note }}
+          Harga saat ini: dasar {{ fmtCount(data.params.base_ms) }} md, query {{ fmtCount(data.params.query_ms) }} md, tick {{ fmtCount(data.params.tick_ns) }} ns.
+        </span>
+      </p>
+
       <AppStatStrip :items="limits" :class="loading ? 'opacity-60' : ''" />
 
       <div class="overflow-x-auto rounded-xl border border-neutral-200 dark:border-white/[0.08]" :class="loading ? 'opacity-60' : ''">
@@ -209,6 +223,9 @@ const th = 'font-medium px-3 py-2.5'
                 <th v-for="r in data.params.rows" :key="r" :class="th" class="text-right">
                   {{ fmtTicks(r) }} baris
                 </th>
+                <th v-if="data.calibration.measured" :class="th" class="text-right" title="Latensi yang benar-benar terukur (data trafik atau probe Deep Check)">
+                  Terukur
+                </th>
                 <th :class="th" class="text-right">
                   Mulai lambat
                 </th>
@@ -242,6 +259,9 @@ const th = 'font-medium px-3 py-2.5'
                   :title="r.loose ? 'Lebih dari dua tingkat koleksi kecil bersarang: angka ini batas bawah dan tidak dihitung ke kapasitas' : `CPU ${fmtMs(pt.cpu_ms)} · database ${fmtMs(pt.db_ms)} · ${fmtTicks(pt.queries)} query${pt.status === 'timeout' ? ' · diputus di batas waktu' : ''}`"
                 >
                   {{ r.loose ? '≥ ' : pt.status === 'timeout' ? '> ' : '' }}{{ fmtMs(pt.latency_ms) }}
+                </td>
+                <td v-if="data.calibration.measured" class="px-3 py-2 text-right font-mono text-xs tabular-nums whitespace-nowrap" :class="r.measured_ms ? 'text-sky-700 dark:text-sky-400' : 'text-neutral-300 dark:text-neutral-600'">
+                  {{ r.measured_ms ? fmtMs(r.measured_ms) : '—' }}
                 </td>
                 <td class="px-3 py-2 text-right text-xs tabular-nums whitespace-nowrap" :class="r.break_rows ? 'text-amber-700 dark:text-amber-400' : 'text-neutral-300 dark:text-neutral-600'">
                   {{ r.break_rows > 1 ? `±${fmtTicks(r.break_rows)} baris` : r.break_rows === 1 ? 'sejak awal' : '—' }}

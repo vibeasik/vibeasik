@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Biaya Proses: rumus tick T(n), Big-O, dan jumlah query tiap rute/fungsi backend proyek aktif.
- * Halaman sendiri (bukan tab Detail Proyek) agar navigasinya cukup lewat sidebar.
+ * Halaman sendiri (bukan tab Detail Proyek) agar navigasinya cukup lewat sidebar. Lebar penuh: tabel rumus dan
+ * proyeksinya lebar, jadi tidak dibatasi 1400px seperti halaman lain.
  */
 definePageMeta({ fluid: true })
 
@@ -11,7 +12,7 @@ onMounted(fetchProjects)
 </script>
 
 <template>
-  <div class="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16 space-y-6">
+  <div class="w-full px-4 sm:px-6 lg:px-8 pt-6 pb-16 space-y-6">
     <AppPageHeader
       title="Biaya Proses"
       description="Performa kode tiap rute dan fungsi backend: rumus tick T(n), kelas pertumbuhan Big-O, dan query di dalam perulangan (N+1). Rute yang berat bisa langsung dijadikan todo."

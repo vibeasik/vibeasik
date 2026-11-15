@@ -273,6 +273,7 @@ export interface LoadParams {
   rows: number[]
   req_per_user_min: number
   small_items: number
+  base_ms: number
   tick_ns: number
   query_ms: number
   row_us: number
@@ -341,6 +342,8 @@ export interface LoadProjection {
   params: LoadParams
   mix: 'assumed' | 'traffic'
   mix_requests?: number
+  /** pencocokan harga tick/query dengan latensi terukur; applied = menggantikan angka bawaan */
+  calibration: { source: 'traffic' | 'deep_check' | '', measured: number, samples: number, used: number, base_ms: number, query_ms: number, tick_ns: number, r2: number, applied: boolean, note: string }
   scenarios: LoadScenario[]
   limits: LoadLimit[]
   routes: RouteLoad[]
