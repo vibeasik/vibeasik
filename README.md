@@ -1,5 +1,7 @@
 # vibeasik
 
+[![M8ven Verified](https://m8ven.ai/badge/mcp/vibeasik-vibeasik-fju41l?variant=verified&v=e197b31dfc13db724d8c513e707490a3)](https://m8ven.ai/mcp/vibeasik-vibeasik-fju41l?s=readme)
+
 > Lapisan standar untuk kode buatan AI. Berjalan di laptop atau dev server Anda, dipanggil agent coding lewat MCP.
 
 [English summary](README.en.md) · [Mulai cepat](docs/GETTING_STARTED.md) · [MCP](docs/MCP.md) · [Edisi & paket](docs/EDITIONS.md) · [Arsitektur](docs/ARCHITECTURE.md)
