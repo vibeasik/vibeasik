@@ -82,9 +82,11 @@ func (s *Server) codeMapToolsList() []Tool {
 		{
 			Name: "vibeasik_code_map_cost",
 			Description: "Process cost per Go route or function, computed statically from the AST: tick formula T(n) (1 tick = one executed statement; n = number of data rows), Big-O class, T(1), and the database query count Q(n) — a query inside a data loop yields Q(n) = n + 1 and is flagged N+1. Sorted most expensive first as data grows. " +
-				"Use it before and after touching a handler to prove the change did not raise its growth class (e.g. O(n) → O(n²)) or introduce an N+1 query, and to find the routes worth optimising. Worst case per branch; all collections share one size n; recursion is flagged and its formula is a lower bound.",
+				"Use it before and after touching a handler to prove the change did not raise its growth class (e.g. O(n) → O(n²)) or introduce an N+1 query, and to find the routes worth optimising. Worst case per branch; all collections share one size n; recursion is flagged and its formula is a lower bound. " +
+				"Each entry also says what n is (stored rows, one page, request payload, files, in-memory) and, for functions, when it runs (per request, background, once at startup, one-off tool) — a high class that only runs at startup does not grow with users. " +
+				"kind='load' projects server load instead: active users × stored rows → requests/s, queries/s, CPU cores, busy DB connections, the users one server can hold, and the routes that dominate.",
 			InputSchema: ToolSchema{Type: "object", Properties: projectProps(map[string]interface{}{
-				"kind":       prop("string", "'routes' (default) or 'funcs'"),
+				"kind":       prop("string", "'routes' (default), 'funcs', or 'load' (server load projection)"),
 				"q":          prop("string", "Substring filter: route path/handler, or function name/file"),
 				"class":      prop("string", "Growth class filter: constant, linear, linearithmic, quadratic, cubic, polynomial"),
 				"n_plus_one": prop("boolean", "Only entries with a query inside a data loop"),
@@ -259,6 +261,9 @@ func codeMapCost(s *Server, pid uint, args map[string]interface{}) (*ToolCallRes
 	if limit <= 0 {
 		limit = 20
 	}
+	if k, _ := args["kind"].(string); k == "load" {
+		return codeMapLoad(s, pid, limit)
+	}
 	q := insight.CostQuery{Limit: limit}
 	q.Kind, _ = args["kind"].(string)
 	q.Search, _ = args["q"].(string)
@@ -301,13 +306,98 @@ func codeMapCost(s *Server, pid uint, args map[string]interface{}) (*ToolCallRes
 		if c.Unbounded {
 			flags += " [loop tanpa batas]"
 		}
-		fmt.Fprintf(&b, "\n%s\n  T(n) = %s → %s, T(1) = %d tick; Q(n) = %s%s\n  %s\n", title, c.Formula, c.BigO, c.Ticks1, c.QueryFormula, flags, where)
+		if c.Composed {
+			flags += " [pangkat lintas fungsi: batas atas longgar]"
+		}
+		fmt.Fprintf(&b, "\n%s\n  T(n) = %s → %s, T(1) = %d tick; Q(n) = %s%s\n  n = %s; terhadap baris data saja: %s\n  %s\n", title, c.Formula, c.BigO, c.Ticks1, c.QueryFormula, flags, scaleLabel(c.Scale), c.DataBigO, where)
 	}
 	for _, r := range page.Routes {
 		line(r.Method+" "+r.Path, "handler "+r.Handler+" ("+r.HandlerDecl+")"+handled(r.Source, r.Handled), r.Cost)
 	}
 	for _, f := range page.Funcs {
-		line(f.Name, fmt.Sprintf("%s:%d — dijangkau %d rute", f.File, f.Line, f.Routes)+handled(f.Source, f.Handled), f.Cost)
+		line(f.Name, fmt.Sprintf("%s:%d — dijangkau %d rute, pemicu: %s", f.File, f.Line, f.Routes, triggerLabel(f.Trigger))+handled(f.Source, f.Handled), f.Cost)
+	}
+	return &ToolCallResult{Content: []ToolContent{{Type: "text", Text: b.String()}}}, nil
+}
+
+func scaleLabel(scale string) string {
+	switch scale {
+	case routemap.ScaleData:
+		return "baris data tersimpan (ikut tumbuh bersama data)"
+	case routemap.ScalePage:
+		return "satu halaman hasil query (dibatasi Limit)"
+	case routemap.ScaleInput:
+		return "isi permintaan (dibatasi klien)"
+	case routemap.ScaleFile:
+		return "berkas / baris berkas"
+	case routemap.ScaleMemory:
+		return "koleksi di memori atau asal tidak diketahui"
+	}
+	return "tetap (tidak ada loop atas data)"
+}
+
+func triggerLabel(t string) string {
+	switch t {
+	case routemap.TriggerRequest:
+		return "per permintaan"
+	case routemap.TriggerBackground:
+		return "latar belakang (worker/goroutine/callback)"
+	case routemap.TriggerStartup:
+		return "sekali saat proses dinyalakan — tidak tumbuh bersama pengguna"
+	case routemap.TriggerTool:
+		return "skrip sekali jalan"
+	}
+	return "tidak terjangkau dari main/rute"
+}
+
+// codeMapLoad: proyeksi beban server (kind = "load") — pengguna aktif × ukuran data → CPU, koneksi DB, titik jenuh.
+func codeMapLoad(s *Server, pid uint, limit int) (*ToolCallResult, error) {
+	res, err := insight.ProjectLoad(s.db, pid, insight.LoadParams{}, limit)
+	if err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	if !res.Supported {
+		b.WriteString("Tidak ada rute backend Go atau PHP yang bisa dihitung di proyek ini.\n")
+		return &ToolCallResult{Content: []ToolContent{{Type: "text", Text: b.String()}}}, nil
+	}
+	fmt.Fprintf(&b, "Proyeksi beban %d rute (porsi trafik: %s; %d rute tidak bisa diperkirakan dari kode saja)\n", res.TotalRoutes, res.Mix, res.LooseRoutes)
+	fmt.Fprintf(&b, "Lapisan fungsi (pemicu): %v\nLapisan guna (arti n per rute): %v\nLapisan pemakaian (operasi): %v\n", res.FuncTriggers, res.RouteScales, res.RouteOps)
+	b.WriteString("\nKapasitas satu server (pengguna aktif) per ukuran data:\n")
+	for _, l := range res.Limits {
+		fmt.Fprintf(&b, "  %d baris → ±%d pengguna aktif (penentu: %s; CPU %d, DB %d)\n", l.Rows, l.MaxUsers, l.Bottleneck, l.ByCPU, l.ByDB)
+	}
+	b.WriteString("\nSkenario (pengguna × baris → req/dtk, query/dtk, inti CPU, koneksi DB, status):\n")
+	for _, sc := range res.Scenarios {
+		fmt.Fprintf(&b, "  %d × %d → %.1f req/dtk, %.0f q/dtk, %.2f inti (%.0f%%), %.2f koneksi (%.0f%%), rata-rata %.0f ms, %s %s\n",
+			sc.Users, sc.Rows, sc.RPS, sc.QPS, sc.CPUCores, sc.CPUUse*100, sc.DBConns, sc.DBUse*100, sc.AvgMs, sc.Status, sc.Bottleneck)
+	}
+	fmt.Fprintf(&b, "\nRute penyumbang beban terbesar (ditampilkan %d):\n", len(res.Routes))
+	for _, r := range res.Routes {
+		fmt.Fprintf(&b, "\n%s %s — %s, n = %s, %s (terhadap baris data: %s), Q(n) = %s, porsi %.1f%%\n ", r.Method, r.Path, r.Op, r.Scale, r.BigO, r.DataBigO, r.QueryFormula, r.Share*100)
+		if r.Loose {
+			b.WriteString(" [tidak bisa diperkirakan dari kode saja: tidak dihitung ke kapasitas]")
+		}
+		for _, pt := range r.Points {
+			fmt.Fprintf(&b, " %d baris: %.1f ms (CPU %.1f, DB %.1f, %.0f query) %s;", pt.Rows, pt.LatencyMs, pt.CPUMs, pt.DBMs, pt.Queries, pt.Status)
+		}
+		if r.BreakRows > 0 {
+			fmt.Fprintf(&b, "\n  melewati batas nyaman mulai ±%d baris", r.BreakRows)
+		}
+		if len(r.Signals) > 0 {
+			fmt.Fprintf(&b, "\n  ciri: %s", strings.Join(r.Signals, ", "))
+		}
+		b.WriteString("\n")
+	}
+	if len(res.Startup) > 0 {
+		b.WriteString("\nBerpangkat tinggi tetapi TIDAK menambah beban per pengguna (sekali saat start / skrip):\n")
+		for _, f := range res.Startup {
+			fmt.Fprintf(&b, "  %s (%s:%d) %s — %s\n", f.Name, f.File, f.Line, f.BigO, triggerLabel(f.Trigger))
+		}
+	}
+	b.WriteString("\nAsumsi:\n")
+	for _, a := range res.Assumptions {
+		b.WriteString("  - " + a + "\n")
 	}
 	return &ToolCallResult{Content: []ToolContent{{Type: "text", Text: b.String()}}}, nil
 }

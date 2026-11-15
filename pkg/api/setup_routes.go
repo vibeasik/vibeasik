@@ -75,6 +75,7 @@ func (s *Server) setupRoutes() {
 	api.Post("/projects/:id/process-cost/todo", s.createProcessCostTodo)
 	api.Post("/projects/:id/process-cost/todos", s.createAllProcessCostTodos)
 	api.Get("/projects/:id/process-cost/source", s.getProcessCostSource)
+	api.Get("/projects/:id/process-cost/projection", s.getProcessCostProjection)
 	api.Get("/projects/:id/findings/todo-prompt", s.getFindingsTodoPrompt)
 	// Uji keamanan proyek: audit router + probe server berjalan (lokal/live). Request probe hanya ke server proyek sendiri.
 	api.Get("/projects/:id/security-test", s.getProjectSecurityTest)

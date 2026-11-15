@@ -25,6 +25,26 @@ func (s *Server) getProcessCost(c *fiber.Ctx) error {
 	return c.JSON(page)
 }
 
+// getProcessCostProjection: proyeksi beban server dari rumus biaya — pengguna aktif × ukuran data → CPU, koneksi
+// database, dan titik jenuh. Semua asumsi bisa diganti lewat query string; yang kosong memakai bawaan.
+func (s *Server) getProcessCostProjection(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id")
+	if err != nil || id <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid project id"})
+	}
+	p := insight.LoadParams{
+		Users: insight.ParseScenarioList(c.Query("users")), Rows: insight.ParseScenarioList(c.Query("rows")),
+		ReqPerUserMin: c.QueryFloat("req_per_user_min"), SmallItems: c.QueryFloat("small_items"), TickNs: c.QueryFloat("tick_ns"),
+		QueryMs: c.QueryFloat("query_ms"), RowUs: c.QueryFloat("row_us"), Cores: c.QueryFloat("cores"), DBConns: c.QueryFloat("db_conns"),
+		BudgetMs: c.QueryFloat("budget_ms"), TimeoutMs: c.QueryFloat("timeout_ms"),
+	}
+	res, err := insight.ProjectLoad(s.db, uint(id), p, c.QueryInt("limit"))
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(res)
+}
+
 // getOwnerRecap: rekap kemajuan proyek untuk pemilik (todo, bug ditutup, perbaikan algoritma, kesehatan kode).
 func (s *Server) getOwnerRecap(c *fiber.Ctx) error {
 	id, err := c.ParamsInt("id")

@@ -28,19 +28,23 @@ type CostQuery struct {
 
 // CostSummary = sebaran kelas pertumbuhan seluruh proyek (bukan hanya halaman yang termuat).
 type CostSummary struct {
-	Supported      bool                `json:"supported"` // false: tidak ada backend Go/PHP ber-rute yang bisa ditelusuri
-	Modules        []string            `json:"modules"`
-	Frameworks     []string            `json:"frameworks"` // Go (fiber, gin …), Laravel, CodeIgniter 4, Slim, PHP
-	Routes         int                 `json:"routes"`
-	Funcs          int                 `json:"funcs"`
-	RouteClasses   map[string]int      `json:"route_classes"`
-	FuncClasses    map[string]int      `json:"func_classes"`
-	NPlusOneRoutes int                 `json:"n_plus_one_routes"`
-	NPlusOneFuncs  int                 `json:"n_plus_one_funcs"`
-	Recursive      int                 `json:"recursive"`
-	Unbounded      int                 `json:"unbounded"`
-	RouteTicks1    int64               `json:"route_ticks_1"` // jumlah T(1) semua rute
-	WorstRoute     *routemap.RouteCost `json:"worst_route,omitempty"`
+	Supported      bool           `json:"supported"` // false: tidak ada backend Go/PHP ber-rute yang bisa ditelusuri
+	Modules        []string       `json:"modules"`
+	Frameworks     []string       `json:"frameworks"` // Go (fiber, gin …), Laravel, CodeIgniter 4, Slim, PHP
+	Routes         int            `json:"routes"`
+	Funcs          int            `json:"funcs"`
+	RouteClasses   map[string]int `json:"route_classes"`
+	FuncClasses    map[string]int `json:"func_classes"`
+	NPlusOneRoutes int            `json:"n_plus_one_routes"`
+	NPlusOneFuncs  int            `json:"n_plus_one_funcs"`
+	Recursive      int            `json:"recursive"`
+	Unbounded      int            `json:"unbounded"`
+	RouteTicks1    int64          `json:"route_ticks_1"` // jumlah T(1) semua rute
+	// Lapisan di atas rumus: pemicu fungsi (request/background/startup/tool/unreached) dan arti n tiap rute
+	// (data/page/input/file/memory/fixed).
+	FuncTriggers map[string]int      `json:"func_triggers"`
+	RouteScales  map[string]int      `json:"route_scales"`
+	WorstRoute   *routemap.RouteCost `json:"worst_route,omitempty"`
 }
 
 // CostPage = jawaban endpoint biaya proses.
@@ -209,10 +213,12 @@ func uniqSorted(in []string) []string {
 }
 
 func summarize(mods, fws []string, rep *routemap.CostReport) CostSummary {
-	s := CostSummary{Modules: uniqSorted(mods), Frameworks: uniqSorted(fws), RouteClasses: map[string]int{}, FuncClasses: map[string]int{}, Routes: len(rep.Routes), Funcs: len(rep.Funcs)}
+	s := CostSummary{Modules: uniqSorted(mods), Frameworks: uniqSorted(fws), RouteClasses: map[string]int{}, FuncClasses: map[string]int{}, Routes: len(rep.Routes), Funcs: len(rep.Funcs),
+		FuncTriggers: map[string]int{}, RouteScales: map[string]int{}}
 	s.Supported = len(rep.Routes) > 0
 	for _, r := range rep.Routes {
 		s.RouteClasses[r.Class]++
+		s.RouteScales[r.Scale]++
 		s.RouteTicks1 += r.Ticks1
 		if r.NPlusOne {
 			s.NPlusOneRoutes++
@@ -220,6 +226,11 @@ func summarize(mods, fws []string, rep *routemap.CostReport) CostSummary {
 	}
 	for _, f := range rep.Funcs {
 		s.FuncClasses[f.Class]++
+		if f.Trigger == "" {
+			s.FuncTriggers["unreached"]++
+		} else {
+			s.FuncTriggers[f.Trigger]++
+		}
 		if f.NPlusOne {
 			s.NPlusOneFuncs++
 		}
