@@ -14,6 +14,12 @@ const page = shallowRef<ProcessCostPage | null>(null)
 const loading = ref(false)
 const failed = ref('')
 const kind = ref<'routes' | 'funcs'>('routes')
+// Tab halaman: rumus biaya (bawaan) atau proyeksi beban (eksperimental).
+const view = ref<'cost' | 'load'>('cost')
+const VIEWS = [
+  { id: 'cost', label: 'Rumus biaya', icon: 'i-lucide-sigma', title: 'Rumus tick, Big-O, dan query tiap rute/fungsi' },
+  { id: 'load', label: 'Proyeksi beban', icon: 'i-lucide-gauge', title: 'Perkiraan kasar beban server dari rumus biaya — eksperimental' }
+] as const
 const search = ref('')
 const klass = ref<CostClass | ''>('')
 const onlyNPlusOne = ref(false)
@@ -216,142 +222,161 @@ const card = 'min-w-0 rounded-2xl border border-neutral-200 dark:border-white/10
       </div>
 
       <template v-else>
-        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <p class="flex items-center gap-1.5 text-xs text-neutral-500">
-            <UIcon name="i-lucide-clock" class="size-3.5" />
-            <span>{{ computedLabel }}. Setiap rumus punya bukti: klik baris untuk melihat potongan kodenya.</span>
-          </p>
-          <AppActionButton
-            kind="scan"
-            label="Cek ulang Big-O"
-            desc="Hitung ulang rumus tick dan Big-O semua rute dari kode terbaru di disk"
-            :loading="rechecking"
-            :disabled="loading"
-            @click="recheck"
-          />
+        <div class="flex items-center gap-1 pb-3 border-b border-neutral-200 dark:border-white/[0.08]" role="tablist" aria-label="Bagian Biaya Proses">
+          <button
+            v-for="v in VIEWS"
+            :key="v.id"
+            type="button"
+            role="tab"
+            :aria-selected="view === v.id"
+            :title="v.title"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            :class="view === v.id ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'text-neutral-600 dark:text-slate-300 hover:bg-neutral-100 dark:hover:bg-white/[0.06]'"
+            @click="view = v.id"
+          >
+            <UIcon :name="v.icon" class="size-3.5" />{{ v.label }}
+            <span v-if="v.id === 'load'" class="rounded-md px-1.5 py-0.5 text-xs font-semibold" :class="view === v.id ? 'bg-amber-400/25 text-amber-200 dark:bg-amber-500/20 dark:text-amber-700' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'">eksperimental</span>
+          </button>
         </div>
 
-        <FindingsTodoBar
-          v-if="findingStats.length"
-          :project-id="project.id"
-          :stats="findingStats"
-          :count="toTodo"
-          :note="findingNote"
-          prompt-scope="cost"
-          todo-desc="Semua sumber biaya yang belum punya todo terbuka dijadikan todo, satu todo per berkas — dihitung dari kode, tanpa LLM"
-          :busy="allBusy"
-          @todo-all="makeAllTodos"
-        />
+        <InsightProcessCostLoadPanel v-if="view === 'load'" :project-id="project.id" :reload-key="page.computed_at" />
 
-        <AppStatStrip :items="stats" />
+        <template v-else>
+          <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p class="flex items-center gap-1.5 text-xs text-neutral-500">
+              <UIcon name="i-lucide-clock" class="size-3.5" />
+              <span>{{ computedLabel }}. Setiap rumus punya bukti: klik baris untuk melihat potongan kodenya.</span>
+            </p>
+            <AppActionButton
+              kind="scan"
+              label="Cek ulang Big-O"
+              desc="Hitung ulang rumus tick dan Big-O semua rute dari kode terbaru di disk"
+              :loading="rechecking"
+              :disabled="loading"
+              @click="recheck"
+            />
+          </div>
 
-        <InsightProcessCostLoadPanel :project-id="project.id" :reload-key="page.computed_at" />
+          <FindingsTodoBar
+            v-if="findingStats.length"
+            :project-id="project.id"
+            :stats="findingStats"
+            :count="toTodo"
+            :note="findingNote"
+            prompt-scope="cost"
+            todo-desc="Semua sumber biaya yang belum punya todo terbuka dijadikan todo, satu todo per berkas — dihitung dari kode, tanpa LLM"
+            :busy="allBusy"
+            @todo-all="makeAllTodos"
+          />
 
-        <div class="grid grid-cols-1 gap-3" :class="history.length > 1 ? 'lg:grid-cols-3' : ''">
-          <section :class="[card, history.length > 1 ? 'lg:col-span-2' : '']" class="space-y-3">
-            <div class="flex items-baseline justify-between gap-2">
+          <AppStatStrip :items="stats" />
+
+          <div class="grid grid-cols-1 gap-3" :class="history.length > 1 ? 'lg:grid-cols-3' : ''">
+            <section :class="[card, history.length > 1 ? 'lg:col-span-2' : '']" class="space-y-3">
+              <div class="flex items-baseline justify-between gap-2">
+                <h3 class="text-sm font-semibold text-neutral-900 dark:text-white">
+                  Sebaran kelas pertumbuhan {{ kind === 'routes' ? 'rute' : 'fungsi' }}
+                </h3>
+                <span class="text-xs text-neutral-500">klik kelas untuk menyaring</span>
+              </div>
+              <div class="flex h-3 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800" role="img" :aria-label="distribution.map(d => `${d.bigO} ${d.n}`).join(', ')">
+                <div v-for="d in distribution" :key="d.key" :class="d.bar" :style="{ width: `${d.pct}%` }" class="h-full border-r-2 border-white dark:border-[#04111f] last:border-r-0" />
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="d in distribution"
+                  :key="d.key"
+                  type="button"
+                  class="inline-flex items-center gap-2 h-9 rounded-xl border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                  :class="klass === d.key ? 'border-neutral-900 dark:border-white bg-neutral-50 dark:bg-white/[0.06]' : 'border-neutral-200 dark:border-white/10 hover:bg-neutral-50 dark:hover:bg-white/[0.04]'"
+                  :aria-pressed="klass === d.key"
+                  :title="d.meaning"
+                  @click="klass = klass === d.key ? '' : d.key"
+                >
+                  <span class="size-2 rounded-full" :class="d.bar" />
+                  <span class="font-mono text-xs font-semibold" :class="d.text">{{ d.bigO }}</span>
+                  <span class="text-neutral-600 dark:text-neutral-300">{{ d.label }}</span>
+                  <span class="tabular-nums font-semibold text-neutral-900 dark:text-white">{{ d.n }}</span>
+                </button>
+              </div>
+              <p v-if="summary.worst_route" class="text-sm text-neutral-600 dark:text-neutral-300">
+                Paling mahal saat data tumbuh:
+                <code class="font-mono text-xs text-neutral-900 dark:text-white">{{ summary.worst_route.method }} {{ summary.worst_route.path }}</code>
+                — T(n) = <code class="font-mono text-xs text-neutral-900 dark:text-white" :title="summary.worst_route.formula">{{ shortFormula(summary.worst_route.formula) }}</code>
+              </p>
+            </section>
+
+            <section v-if="history.length > 1" :class="card" class="space-y-2">
               <h3 class="text-sm font-semibold text-neutral-900 dark:text-white">
-                Sebaran kelas pertumbuhan {{ kind === 'routes' ? 'rute' : 'fungsi' }}
+                Rute berat dari waktu ke waktu
               </h3>
-              <span class="text-xs text-neutral-500">klik kelas untuk menyaring</span>
-            </div>
-            <div class="flex h-3 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800" role="img" :aria-label="distribution.map(d => `${d.bigO} ${d.n}`).join(', ')">
-              <div v-for="d in distribution" :key="d.key" :class="d.bar" :style="{ width: `${d.pct}%` }" class="h-full border-r-2 border-white dark:border-[#04111f] last:border-r-0" />
-            </div>
-            <div class="flex flex-wrap gap-2">
+              <p class="text-xs text-neutral-500">
+                O(n²) ke atas + N+1 query. Turun = algoritma membaik.
+              </p>
+              <InsightMiniSeriesChart :values="heavySeries" :labels="historyLabels" mode="line" tone="amber" unit="rute" :height="120" label="Jumlah rute berat per hari" />
+            </section>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex rounded-lg border border-neutral-200 dark:border-white/10 p-0.5" role="group" label="Jenis daftar">
               <button
-                v-for="d in distribution"
-                :key="d.key"
+                v-for="k in [{ id: 'routes', label: `Rute (${summary.routes})` }, { id: 'funcs', label: `Fungsi (${summary.funcs})` }]"
+                :key="k.id"
                 type="button"
-                class="inline-flex items-center gap-2 h-9 rounded-xl border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-                :class="klass === d.key ? 'border-neutral-900 dark:border-white bg-neutral-50 dark:bg-white/[0.06]' : 'border-neutral-200 dark:border-white/10 hover:bg-neutral-50 dark:hover:bg-white/[0.04]'"
-                :aria-pressed="klass === d.key"
-                :title="d.meaning"
-                @click="klass = klass === d.key ? '' : d.key"
+                class="h-8 px-3 rounded-md text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                :class="kind === k.id ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-medium' : 'text-neutral-600 dark:text-slate-300 hover:bg-neutral-100 dark:hover:bg-white/[0.06]'"
+                :aria-pressed="kind === k.id"
+                @click="kind = k.id as 'routes' | 'funcs'"
               >
-                <span class="size-2 rounded-full" :class="d.bar" />
-                <span class="font-mono text-xs font-semibold" :class="d.text">{{ d.bigO }}</span>
-                <span class="text-neutral-600 dark:text-neutral-300">{{ d.label }}</span>
-                <span class="tabular-nums font-semibold text-neutral-900 dark:text-white">{{ d.n }}</span>
+                {{ k.label }}
               </button>
             </div>
-            <p v-if="summary.worst_route" class="text-sm text-neutral-600 dark:text-neutral-300">
-              Paling mahal saat data tumbuh:
-              <code class="font-mono text-xs text-neutral-900 dark:text-white">{{ summary.worst_route.method }} {{ summary.worst_route.path }}</code>
-              — T(n) = <code class="font-mono text-xs text-neutral-900 dark:text-white" :title="summary.worst_route.formula">{{ shortFormula(summary.worst_route.formula) }}</code>
-            </p>
-          </section>
-
-          <section v-if="history.length > 1" :class="card" class="space-y-2">
-            <h3 class="text-sm font-semibold text-neutral-900 dark:text-white">
-              Rute berat dari waktu ke waktu
-            </h3>
-            <p class="text-xs text-neutral-500">
-              O(n²) ke atas + N+1 query. Turun = algoritma membaik.
-            </p>
-            <InsightMiniSeriesChart :values="heavySeries" :labels="historyLabels" mode="line" tone="amber" unit="rute" :height="120" label="Jumlah rute berat per hari" />
-          </section>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="inline-flex rounded-lg border border-neutral-200 dark:border-white/10 p-0.5" role="group" label="Jenis daftar">
-            <button
-              v-for="k in [{ id: 'routes', label: `Rute (${summary.routes})` }, { id: 'funcs', label: `Fungsi (${summary.funcs})` }]"
-              :key="k.id"
-              type="button"
-              class="h-8 px-3 rounded-md text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-              :class="kind === k.id ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-medium' : 'text-neutral-600 dark:text-slate-300 hover:bg-neutral-100 dark:hover:bg-white/[0.06]'"
-              :aria-pressed="kind === k.id"
-              @click="kind = k.id as 'routes' | 'funcs'"
+            <UInput v-model="search" icon="i-lucide-search" size="sm" :placeholder="kind === 'routes' ? 'Cari path atau handler…' : 'Cari fungsi atau berkas…'" class="w-64" label="Cari" />
+            <UButton
+              size="sm"
+              :color="onlyNPlusOne ? 'error' : 'neutral'"
+              :variant="onlyNPlusOne ? 'soft' : 'outline'"
+              icon="i-lucide-triangle-alert"
+              :aria-pressed="onlyNPlusOne"
+              @click="onlyNPlusOne = !onlyNPlusOne"
             >
-              {{ k.label }}
-            </button>
+              Hanya N+1
+            </UButton>
+            <UButton v-if="klass || onlyNPlusOne || search" size="sm" color="neutral" variant="ghost" icon="i-lucide-x" @click="klass = ''; onlyNPlusOne = false; search = ''">
+              Hapus saringan
+            </UButton>
+            <span class="ml-auto text-xs text-neutral-500 tabular-nums">{{ from }}–{{ to }} dari {{ total }}</span>
           </div>
-          <UInput v-model="search" icon="i-lucide-search" size="sm" :placeholder="kind === 'routes' ? 'Cari path atau handler…' : 'Cari fungsi atau berkas…'" class="w-64" label="Cari" />
-          <UButton
-            size="sm"
-            :color="onlyNPlusOne ? 'error' : 'neutral'"
-            :variant="onlyNPlusOne ? 'soft' : 'outline'"
-            icon="i-lucide-triangle-alert"
-            :aria-pressed="onlyNPlusOne"
-            @click="onlyNPlusOne = !onlyNPlusOne"
-          >
-            Hanya N+1
-          </UButton>
-          <UButton v-if="klass || onlyNPlusOne || search" size="sm" color="neutral" variant="ghost" icon="i-lucide-x" @click="klass = ''; onlyNPlusOne = false; search = ''">
-            Hapus saringan
-          </UButton>
-          <span class="ml-auto text-xs text-neutral-500 tabular-nums">{{ from }}–{{ to }} dari {{ total }}</span>
-        </div>
 
-        <div v-if="total === 0" class="rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-700 p-8 text-center text-sm text-neutral-500">
-          Tidak ada {{ kind === 'routes' ? 'rute' : 'fungsi' }} yang cocok dengan saringan ini.
-        </div>
-        <InsightProcessCostTable
-          v-else
-          :kind="page.kind"
-          :routes="page.routes"
-          :funcs="page.funcs"
-          :busy="busySource"
-          :project-id="project.id"
-          :focus="focusFunc"
-          :class="loading ? 'opacity-60' : ''"
-          @make-todo="makeTodo"
-          @open-todo="openTodos"
-          @open-func="openFunc"
-          @focused="focusFunc = null"
-        />
+          <div v-if="total === 0" class="rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-700 p-8 text-center text-sm text-neutral-500">
+            Tidak ada {{ kind === 'routes' ? 'rute' : 'fungsi' }} yang cocok dengan saringan ini.
+          </div>
+          <InsightProcessCostTable
+            v-else
+            :kind="page.kind"
+            :routes="page.routes"
+            :funcs="page.funcs"
+            :busy="busySource"
+            :project-id="project.id"
+            :focus="focusFunc"
+            :class="loading ? 'opacity-60' : ''"
+            @make-todo="makeTodo"
+            @open-todo="openTodos"
+            @open-func="openFunc"
+            @focused="focusFunc = null"
+          />
 
-        <div v-if="total > PAGE" class="flex justify-end gap-2">
-          <UButton size="sm" color="neutral" variant="outline" icon="i-lucide-chevron-left" :disabled="offset === 0 || loading" @click="go(-1)">
-            Sebelumnya
-          </UButton>
-          <UButton size="sm" color="neutral" variant="outline" trailing-icon="i-lucide-chevron-right" :disabled="to >= total || loading" @click="go(1)">
-            Berikutnya
-          </UButton>
-        </div>
+          <div v-if="total > PAGE" class="flex justify-end gap-2">
+            <UButton size="sm" color="neutral" variant="outline" icon="i-lucide-chevron-left" :disabled="offset === 0 || loading" @click="go(-1)">
+              Sebelumnya
+            </UButton>
+            <UButton size="sm" color="neutral" variant="outline" trailing-icon="i-lucide-chevron-right" :disabled="to >= total || loading" @click="go(1)">
+              Berikutnya
+            </UButton>
+          </div>
 
-        <InsightProcessCostExplainer />
+          <InsightProcessCostExplainer />
+        </template>
       </template>
     </template>
   </div>

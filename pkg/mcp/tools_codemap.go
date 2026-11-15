@@ -84,7 +84,7 @@ func (s *Server) codeMapToolsList() []Tool {
 			Description: "Process cost per Go route or function, computed statically from the AST: tick formula T(n) (1 tick = one executed statement; n = number of data rows), Big-O class, T(1), and the database query count Q(n) — a query inside a data loop yields Q(n) = n + 1 and is flagged N+1. Sorted most expensive first as data grows. " +
 				"Use it before and after touching a handler to prove the change did not raise its growth class (e.g. O(n) → O(n²)) or introduce an N+1 query, and to find the routes worth optimising. Worst case per branch; all collections share one size n; recursion is flagged and its formula is a lower bound. " +
 				"Each entry also says what n is (stored rows, one page, request payload, files, in-memory) and, for functions, when it runs (per request, background, once at startup, one-off tool) — a high class that only runs at startup does not grow with users. " +
-				"kind='load' projects server load instead: active users × stored rows → requests/s, queries/s, CPU cores, busy DB connections, the users one server can hold, and the routes that dominate.",
+				"kind='load' (experimental, rough estimate only) projects server load instead: active users × stored rows → requests/s, queries/s, CPU cores, busy DB connections, the users one server can hold, and the routes that dominate.",
 			InputSchema: ToolSchema{Type: "object", Properties: projectProps(map[string]interface{}{
 				"kind":       prop("string", "'routes' (default), 'funcs', or 'load' (server load projection)"),
 				"q":          prop("string", "Substring filter: route path/handler, or function name/file"),
@@ -361,6 +361,7 @@ func codeMapLoad(s *Server, pid uint, limit int) (*ToolCallResult, error) {
 		b.WriteString("Tidak ada rute backend Go atau PHP yang bisa dihitung di proyek ini.\n")
 		return &ToolCallResult{Content: []ToolContent{{Type: "text", Text: b.String()}}}, nil
 	}
+	b.WriteString("EKSPERIMENTAL — cara perhitungan terbaik masih dianalisis; ini hanya perhitungan kasar, bukan dasar keputusan kapasitas.\n")
 	fmt.Fprintf(&b, "Proyeksi beban %d rute (porsi trafik: %s; %d rute tidak bisa diperkirakan dari kode saja)\n", res.TotalRoutes, res.Mix, res.LooseRoutes)
 	fmt.Fprintf(&b, "Lapisan fungsi (pemicu): %v\nLapisan guna (arti n per rute): %v\nLapisan pemakaian (operasi): %v\n", res.FuncTriggers, res.RouteScales, res.RouteOps)
 	b.WriteString("\nKapasitas satu server (pengguna aktif) per ukuran data:\n")

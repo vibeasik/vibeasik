@@ -90,6 +90,14 @@ const th = 'font-medium px-3 py-2.5'
       </span>
     </div>
 
+    <div class="flex items-start gap-2.5 rounded-xl border border-amber-300/60 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+      <UIcon name="i-lucide-flask-conical" class="size-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <p>
+        <strong class="font-semibold">Eksperimental.</strong>
+        Cara perhitungan terbaik masih dianalisis; angka di bawah ini hanya perhitungan kasar dan belum layak dijadikan dasar keputusan kapasitas.
+      </p>
+    </div>
+
     <form class="flex flex-wrap items-end gap-3" @submit.prevent="load">
       <label :class="field">
         <span class="block">Pengguna aktif</span>
