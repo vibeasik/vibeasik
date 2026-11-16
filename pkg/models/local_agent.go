@@ -50,6 +50,8 @@ type AgentExecutionResult struct {
 	AgentKey string `json:"agent_key"`
 	Success  bool   `json:"success"`
 	Output   string `json:"output"`
+	// Stdout: standard output only (no stderr warnings), for callers that parse the agent's answer.
+	Stdout   string `json:"stdout,omitempty"`
 	ExitCode int    `json:"exit_code"`
 	Duration string `json:"duration"`
 	Message  string `json:"message"`

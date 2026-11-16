@@ -134,14 +134,17 @@ func (r *Registry) Execute(ctx context.Context, req models.AgentExecutionRequest
 	cmd.Dir = workDir
 	cmd.Env = env
 
-	var buf bytes.Buffer
-	var w io.Writer = &buf
+	// combined (stdout+stderr, plus salinan langsung ke req.Output) untuk Output; stdout saja untuk Stdout —
+	// jawaban mesin tidak tercampur pesan stderr agent (peringatan hook, progres).
+	var combined, stdout bytes.Buffer
+	all := &lockedWriter{w: &combined}
 	if req.Output != nil {
-		w = io.MultiWriter(&buf, req.Output)
+		all.w = io.MultiWriter(&combined, req.Output)
 	}
-	cmd.Stdout, cmd.Stderr = w, w // writer yang sama: exec menjamin satu Write dalam satu waktu
+	cmd.Stdout = io.MultiWriter(&stdout, all)
+	cmd.Stderr = all
 	err = cmd.Run()
-	out := buf.Bytes()
+	out := combined.Bytes()
 	duration := time.Since(startTime).Round(time.Millisecond).String()
 
 	exitCode := 0
@@ -169,6 +172,7 @@ func (r *Registry) Execute(ctx context.Context, req models.AgentExecutionRequest
 		AgentKey: req.AgentKey,
 		Success:  success,
 		Output:   outputText,
+		Stdout:   stdout.String(),
 		ExitCode: exitCode,
 		Duration: duration,
 		Message:  fmt.Sprintf("Eksekusi selesai dalam %s dengan status code %d", duration, exitCode),
@@ -278,4 +282,16 @@ func splitArgs(template, prompt string) []string {
 // SplitArgs memecah args_template agent custom (quote-aware) dan menyisipkan prompt di {{prompt}}.
 func SplitArgs(template, prompt string) []string {
 	return splitArgs(template, prompt)
+}
+
+// lockedWriter: stdout dan stderr ditulis dari goroutine berbeda ke writer yang sama.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }

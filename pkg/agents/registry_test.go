@@ -130,4 +130,7 @@ func TestExecuteStreamsOutputToWriter(t *testing.T) {
 	if !strings.Contains(live.String(), "halo") || !strings.Contains(live.String(), "galat") || live.String() != res.Output {
 		t.Fatalf("live=%q output=%q", live.String(), res.Output)
 	}
+	if res.Stdout != "halo\n" {
+		t.Fatalf("stdout harus tanpa stderr: %q", res.Stdout)
+	}
 }
