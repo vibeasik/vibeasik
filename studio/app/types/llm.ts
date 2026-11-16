@@ -172,6 +172,8 @@ export interface LLMFailedRequest {
   updated_at: string
   status: LLMFailedStatus
   notified: boolean
+  /** pengecekan QA/security: dieksekusi lokal hanya oleh Claude Code dengan model minimum */
+  critical?: boolean
   kind: string
   purpose?: string
   task?: string

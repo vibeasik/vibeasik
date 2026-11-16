@@ -51,3 +51,8 @@ func (a *ClaudeAdapter) BuildArgs(prompt string, projectPath string) []string {
 	// Claude code non-interactive prompt mode: claude -p "<prompt>"
 	return []string{"-p", prompt}
 }
+
+// ModelArgs selects the model explicitly: claude -p "<prompt>" --model <model>.
+func (a *ClaudeAdapter) ModelArgs(model string) []string {
+	return []string{"--model", model}
+}

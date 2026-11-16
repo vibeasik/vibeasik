@@ -107,3 +107,14 @@ func TestExecuteRejectsInvalidProjectPath(t *testing.T) {
 		t.Fatal("agent berjalan di cwd proses")
 	}
 }
+
+func TestClaudeAdapterSelectsModel(t *testing.T) {
+	var a AgentAdapter = NewClaudeAdapter()
+	ma, ok := a.(ModelArgsAdapter)
+	if !ok {
+		t.Fatal("claude adapter harus bisa memilih model")
+	}
+	if got := ma.ModelArgs("claude-opus-5-5"); len(got) != 2 || got[0] != "--model" || got[1] != "claude-opus-5-5" {
+		t.Fatalf("ModelArgs = %v", got)
+	}
+}

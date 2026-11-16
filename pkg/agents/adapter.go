@@ -10,3 +10,8 @@ type AgentAdapter interface {
 	Detect() (bool, string, string) // (installed, path, version)
 	BuildArgs(prompt string, projectPath string) []string
 }
+
+// ModelArgsAdapter is implemented by agents whose CLI can select the model explicitly.
+type ModelArgsAdapter interface {
+	ModelArgs(model string) []string
+}

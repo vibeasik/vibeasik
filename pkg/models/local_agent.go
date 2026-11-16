@@ -35,6 +35,8 @@ type AgentExecutionRequest struct {
 	Prompt      string `json:"prompt"`
 	ProjectPath string `json:"project_path"` // absolute or relative directory to run the agent in
 	TimeoutSec  int    `json:"timeout_sec"`  // optional timeout, default 60s
+	// Model: optional model id for agents that can pick one (e.g. claude --model); ignored by others.
+	Model string `json:"model,omitempty"`
 }
 
 // AgentExecutionResult contains the execution output and timing

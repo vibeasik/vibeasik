@@ -194,7 +194,15 @@ func (r *Registry) resolveAgentCommand(req models.AgentExecutionRequest, workDir
 		if !detected {
 			return "", nil, fmt.Errorf("agent '%s' tidak terdeteksi pada sistem (perintah '%s' tidak ditemukan di PATH)", adapter.Name(), adapter.Command())
 		}
-		return path, adapter.BuildArgs(req.Prompt, workDir), nil
+		args := adapter.BuildArgs(req.Prompt, workDir)
+		if model := strings.TrimSpace(req.Model); model != "" {
+			ma, ok := adapter.(ModelArgsAdapter)
+			if !ok {
+				return "", nil, fmt.Errorf("agent '%s' tidak bisa memilih model '%s'", adapter.Name(), model)
+			}
+			args = append(args, ma.ModelArgs(model)...)
+		}
+		return path, args, nil
 	}
 	if db == nil {
 		return "", nil, fmt.Errorf("agent '%s' tidak dikenali", req.AgentKey)
