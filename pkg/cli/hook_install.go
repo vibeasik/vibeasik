@@ -71,6 +71,10 @@ func installClaudeHooks(path, command string) (int, error) {
 	added := 0
 	for _, h := range hookEvents {
 		groups, _ := hooks[h.event].([]interface{})
+		if repairStaleHook(groups, "hook claude-code", command) {
+			added++ // binary lama sudah tidak ada: perintahnya diarahkan ke binary ini
+			continue
+		}
 		if hasHookCommand(groups, "hook claude-code") {
 			continue
 		}
@@ -99,6 +103,44 @@ func installClaudeHooks(path, command string) (int, error) {
 		_ = os.WriteFile(path+".bak", original, 0o644)
 	}
 	return added, os.WriteFile(path, append(out, '\n'), 0o644)
+}
+
+// repairStaleHook mengganti perintah hook vibeasik yang binary-nya (path absolut) sudah tidak ada, mis. setelah
+// folder instalasi lama dipindah atau dihapus. true bila ada yang diganti.
+func repairStaleHook(groups []interface{}, needle, command string) bool {
+	repaired := false
+	for _, g := range groups {
+		group, _ := g.(map[string]interface{})
+		list, _ := group["hooks"].([]interface{})
+		for _, h := range list {
+			item, _ := h.(map[string]interface{})
+			c, _ := item["command"].(string)
+			if !strings.Contains(c, needle) || c == command {
+				continue
+			}
+			if bin := hookBinary(c); filepath.IsAbs(bin) {
+				if _, err := os.Stat(bin); os.IsNotExist(err) {
+					item["command"] = command
+					repaired = true
+				}
+			}
+		}
+	}
+	return repaired
+}
+
+// hookBinary: token pertama perintah hook, tanpa tanda kutip.
+func hookBinary(command string) string {
+	command = strings.TrimSpace(command)
+	if strings.HasPrefix(command, `"`) {
+		if end := strings.Index(command[1:], `"`); end >= 0 {
+			return command[1 : end+1]
+		}
+	}
+	if f := strings.Fields(command); len(f) > 0 {
+		return f[0]
+	}
+	return ""
 }
 
 func hasHookCommand(groups []interface{}, needle string) bool {

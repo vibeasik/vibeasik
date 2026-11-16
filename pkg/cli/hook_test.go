@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -53,5 +54,20 @@ func TestInstallClaudeHooksIsIdempotent(t *testing.T) {
 	stop := s["hooks"].(map[string]interface{})["Stop"].([]interface{})
 	if s["model"] != "opus" || len(stop) != 2 {
 		t.Fatalf("existing settings must be kept: %s", raw)
+	}
+}
+
+func TestInstallClaudeHooksRepairsMissingBinary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	stale := `\"` + filepath.Join(dir, "lama", "vibeasik") + `\" hook claude-code`
+	os.WriteFile(path, []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"`+stale+`"}]}]}}`), 0o644)
+	added, err := installClaudeHooks(path, "vibeasik-baru hook claude-code")
+	if err != nil || added != len(hookEvents) {
+		t.Fatalf("added=%d err=%v", added, err)
+	}
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), "lama") || strings.Count(string(raw), "vibeasik-baru hook claude-code") != len(hookEvents) {
+		t.Fatalf("hook lama harus diganti, bukan digandakan: %s", raw)
 	}
 }
