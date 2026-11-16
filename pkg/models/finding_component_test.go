@@ -36,3 +36,27 @@ func TestFindingComponentResolution(t *testing.T) {
 		t.Fatalf("temuan dua komponen harus terpisah dengan ID pertama tetap: %+v", fs)
 	}
 }
+
+// RelativePath komponen diawali nama folder akar (proyek yang dipindah): temuan "toko/mobile/lib/main.dart"
+// tetap menunjuk berkas di folder komponen, bukan ".../toko/mobile/toko/mobile/lib/main.dart".
+func TestFindingPathsRootPrefixedComponent(t *testing.T) {
+	root := "/srv/toko"
+	p := Project{RootPath: root, Components: []Component{
+		{Name: "Mobile", RelativePath: "toko/mobile", AbsolutePath: filepath.Join(root, "mobile")},
+	}}
+	want := filepath.Join(root, "mobile/lib/main.dart")
+	paths := p.FindingPaths("toko/mobile", "toko/mobile/lib/main.dart")
+	if len(paths) < 2 || paths[1] != want {
+		t.Fatalf("path tanpa awalan kunci komponen harus jadi kandidat kedua: %v", paths)
+	}
+	found := false
+	for _, c := range p.FindingPaths("", "toko/mobile/lib/main.dart") {
+		found = found || c == want
+	}
+	if !found {
+		t.Fatalf("tanpa komponen, induk akar harus jadi kandidat: %v", p.FindingPaths("", "toko/mobile/lib/main.dart"))
+	}
+	if _, ok := p.ComponentInnerPath(Component{Name: "Luar", AbsolutePath: "/opt/luar"}, "Luar/a.go"); ok {
+		t.Fatal("komponen di luar akar (kunci = nama) tidak boleh dipotong")
+	}
+}

@@ -95,16 +95,22 @@ func (p Project) ComponentKey(c Component) string {
 // dua komponen punya path relatif yang sama).
 func (p Project) FindingPaths(component, targetFile string) []string {
 	rel := filepath.FromSlash(targetFile)
-	paths := make([]string, 0, 3+len(p.Components)*2)
+	paths := make([]string, 0, 5+len(p.Components)*2)
 	if component != "" {
 		for _, c := range p.Components {
 			if c.AbsolutePath != "" && p.ComponentKey(c) == component {
 				paths = append(paths, filepath.Join(c.AbsolutePath, rel))
+				if inner, ok := p.ComponentInnerPath(c, targetFile); ok {
+					paths = append(paths, filepath.Join(c.AbsolutePath, filepath.FromSlash(inner)))
+				}
 			}
 		}
 	}
 	if p.RootPath != "" && p.RootPath != "-" {
 		paths = append(paths, filepath.Join(p.RootPath, rel))
+		if alt, ok := p.rootParentPath(targetFile); ok {
+			paths = append(paths, alt)
+		}
 	}
 	for _, c := range p.Components {
 		if c.AbsolutePath != "" {
@@ -112,6 +118,32 @@ func (p Project) FindingPaths(component, targetFile string) []string {
 		}
 	}
 	return append(paths, targetFile)
+}
+
+// ComponentInnerPath: targetFile tanpa awalan kunci komponen ("toko/mobile/lib/a.dart" → "lib/a.dart"). Temuan
+// audit ditulis relatif terhadap RelativePath komponen; bila RelativePath diawali nama folder akar (mis. proyek
+// yang dipindah, "toko/mobile" dengan akar ".../toko"), path itu tidak bisa digabung langsung ke AbsolutePath.
+func (p Project) ComponentInnerPath(c Component, targetFile string) (string, bool) {
+	key := strings.Trim(p.ComponentKey(c), "/")
+	if key == "" || key == c.Name {
+		return "", false
+	}
+	t := strings.TrimPrefix(filepath.ToSlash(targetFile), "./")
+	if inner := strings.TrimPrefix(t, key+"/"); inner != t && inner != "" {
+		return inner, true
+	}
+	return "", false
+}
+
+// rootParentPath: path temuan yang diawali nama folder akar ("toko/mobile/lib/a.dart" dengan akar ".../toko")
+// digabung ke induk akar, sama dengan cara diagnostics.resolveComponentDir mencari folder komponen.
+func (p Project) rootParentPath(targetFile string) (string, bool) {
+	base := filepath.Base(p.RootPath)
+	t := strings.TrimPrefix(filepath.ToSlash(targetFile), "./")
+	if base == "" || base == "." || base == "/" || !strings.HasPrefix(t, base+"/") {
+		return "", false
+	}
+	return filepath.Join(filepath.Dir(p.RootPath), filepath.FromSlash(t)), true
 }
 
 // Component represents an individual app/service inside a project bundle

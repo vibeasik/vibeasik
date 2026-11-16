@@ -395,6 +395,9 @@ func evidencePaths(project *models.Project, f models.Finding) []string {
 	for _, c := range project.Components {
 		if f.Component != "" && c.AbsolutePath != "" && project.ComponentKey(c) == f.Component {
 			out = append(out, filepath.Join(c.AbsolutePath, filepath.FromSlash(f.TargetFile)))
+			if inner, ok := project.ComponentInnerPath(c, f.TargetFile); ok {
+				out = append(out, filepath.Join(c.AbsolutePath, filepath.FromSlash(inner)))
+			}
 		}
 	}
 	return append(out, filepath.Join(project.RootPath, filepath.FromSlash(f.TargetFile)))
