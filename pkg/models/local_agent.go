@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 // LocalAgentConfig represents a user-defined plug-and-play CLI agent
 type LocalAgentConfig struct {
@@ -37,6 +40,9 @@ type AgentExecutionRequest struct {
 	TimeoutSec  int    `json:"timeout_sec"`  // optional timeout, default 60s
 	// Model: optional model id for agents that can pick one (e.g. claude --model); ignored by others.
 	Model string `json:"model,omitempty"`
+	// Output: optional live copy of the agent's combined stdout/stderr while it runs (e.g. a log file
+	// shown in a terminal window). The full output is still returned in the result.
+	Output io.Writer `json:"-"`
 }
 
 // AgentExecutionResult contains the execution output and timing

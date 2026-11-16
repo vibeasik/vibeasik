@@ -1,8 +1,10 @@
 package agents
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -132,7 +134,14 @@ func (r *Registry) Execute(ctx context.Context, req models.AgentExecutionRequest
 	cmd.Dir = workDir
 	cmd.Env = env
 
-	out, err := cmd.CombinedOutput()
+	var buf bytes.Buffer
+	var w io.Writer = &buf
+	if req.Output != nil {
+		w = io.MultiWriter(&buf, req.Output)
+	}
+	cmd.Stdout, cmd.Stderr = w, w // writer yang sama: exec menjamin satu Write dalam satu waktu
+	err = cmd.Run()
+	out := buf.Bytes()
 	duration := time.Since(startTime).Round(time.Millisecond).String()
 
 	exitCode := 0

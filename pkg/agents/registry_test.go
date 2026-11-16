@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -116,5 +117,17 @@ func TestClaudeAdapterSelectsModel(t *testing.T) {
 	}
 	if got := ma.ModelArgs("claude-opus-5-5"); len(got) != 2 || got[0] != "--model" || got[1] != "claude-opus-5-5" {
 		t.Fatalf("ModelArgs = %v", got)
+	}
+}
+
+func TestExecuteStreamsOutputToWriter(t *testing.T) {
+	r := newTestRegistry(t)
+	var live bytes.Buffer
+	res, err := r.Execute(context.Background(), models.AgentExecutionRequest{AgentKey: "test-sh", Prompt: "echo halo; echo galat 1>&2", ProjectPath: t.TempDir(), Output: &live}, nil)
+	if err != nil || !res.Success {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if !strings.Contains(live.String(), "halo") || !strings.Contains(live.String(), "galat") || live.String() != res.Output {
+		t.Fatalf("live=%q output=%q", live.String(), res.Output)
 	}
 }
