@@ -205,6 +205,12 @@ func backfillProjectShortDescriptions(db *gorm.DB) {
 	}
 }
 
+// Open membuka koneksi database yang sama dengan InitDB tanpa migrasi skema dan tanpa mengisi data bawaan —
+// untuk perintah pemeliharaan yang hanya membaca atau mengubah kolom tertentu.
+func Open(dbPathOverride string) (*gorm.DB, error) {
+	return openDatabaseConnection(dbPathOverride, config.GetConfig(), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+}
+
 // InitDB initializes database connection based on config (.env) or explicit path override
 func InitDB(dbPathOverride string) (*gorm.DB, error) {
 	cfg := config.GetConfig()
