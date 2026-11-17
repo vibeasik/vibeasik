@@ -129,7 +129,8 @@ func AutoEligible(db *gorm.DB, now time.Time) Eligibility {
 
 	var out Eligibility
 	for _, n := range nodes {
-		if sentLocal[n.ID] || LocalOnly(n.Source, n.Key) {
+		// Node yang sudah digantikan atau lewat masa berlakunya tetap tersimpan lokal, tetapi tidak dibagikan.
+		if sentLocal[n.ID] || LocalOnly(n.Source, n.Key) || n.SupersededByID != nil || n.Expired(now) {
 			continue
 		}
 		h := contentHash(n.Title, n.Content)

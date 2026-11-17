@@ -321,8 +321,10 @@ func Candidates(db *gorm.DB) []Candidate {
 		[]string{models.KnowledgeSrcPromoted, models.KnowledgeSrcReview, models.KnowledgeSrcGap}).
 		Where("helpful >= harmful").Order("helpful DESC, id").Limit(200).Find(&nodes)
 	var out []Candidate
+	now := time.Now()
 	for _, n := range nodes {
-		if sent[n.ID] || LocalOnly(n.Source, n.Key) {
+		// Node yang sudah digantikan atau lewat masa berlakunya tetap tersimpan lokal, tetapi tidak diusulkan.
+		if sent[n.ID] || LocalOnly(n.Source, n.Key) || n.SupersededByID != nil || n.Expired(now) {
 			continue
 		}
 		title, content := security.SanitizeText(n.Title), security.SanitizeText(n.Content)

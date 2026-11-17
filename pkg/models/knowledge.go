@@ -84,11 +84,23 @@ type KnowledgeNode struct {
 	ClusterID    uint       `gorm:"index" json:"cluster_id"`
 	MergedIntoID *uint      `json:"merged_into_id,omitempty"`
 	// NeedsReview: patokan bersumber berkas yang berkali-kali terbukti keliru — berkasnya perlu ditinjau manusia/agent.
-	NeedsReview  bool      `gorm:"index" json:"needs_review"`
-	Status       string    `gorm:"size:16;index;default:'active'" json:"status"`
-	StatusReason string    `gorm:"type:text" json:"status_reason,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	NeedsReview  bool   `gorm:"index" json:"needs_review"`
+	Status       string `gorm:"size:16;index;default:'active'" json:"status"`
+	StatusReason string `gorm:"type:text" json:"status_reason,omitempty"`
+	// Masa berlaku. Node yang digantikan atau lewat masa berlakunya tetap berstatus aktif dan tersimpan utuh,
+	// hanya tidak dikirim temu-kembali. AppliesTo: batas berlaku dalam teks pendek (go>=1.26, mcp 2025-06-18),
+	// ditampilkan ke agent. ValidUntil: sesudah waktu ini node tidak dikirim dan kurator menandainya perlu
+	// ditinjau. SupersededByID: node pengganti (selalu ujung rantai); berlaku selama penggantinya aktif.
+	AppliesTo      string     `gorm:"size:64" json:"applies_to,omitempty"`
+	ValidUntil     *time.Time `json:"valid_until,omitempty"`
+	SupersededByID *uint      `gorm:"index" json:"superseded_by_id,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// Expired: masa berlaku node sudah lewat pada waktu now.
+func (n KnowledgeNode) Expired(now time.Time) bool {
+	return n.ValidUntil != nil && !now.Before(*n.ValidUntil)
 }
 
 // KnowledgeWeakWeight: bobot satu bukti lemah terhadap satu bukti kuat di Utility. Satu nilai todo dibagikan ke

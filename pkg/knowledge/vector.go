@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"gorm.io/gorm"
@@ -135,6 +136,9 @@ type entry struct {
 	v      vec
 	tf     map[string]float64 // frekuensi kata berbobot (judul/tag ×2) untuk BM25
 	dl     float64            // panjang dokumen = jumlah tf
+	// Masa berlaku (validity.go): replacedBy = pengganti aktif (0 = tidak digantikan), until = batas berlaku.
+	replacedBy uint
+	until      time.Time
 }
 
 type index struct {
@@ -216,6 +220,7 @@ func build(db *gorm.DB, sig string) *index {
 	if ix.n > 0 {
 		ix.avgdl /= float64(ix.n)
 	}
+	loadValidity(db, ix)
 	return ix
 }
 

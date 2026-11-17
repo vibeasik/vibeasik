@@ -147,7 +147,7 @@ func rankWith(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exc
 		if (len(kinds) > 0 && !kinds[e.kind]) || skip[e.source] {
 			return false
 		}
-		if exclude != nil && exclude(e) {
+		if (exclude != nil && exclude(e)) || !e.inForce(now) {
 			return false
 		}
 		return len(eco) == 0 || e.domain == "" || !IsEcosystem(e.domain) || eco[e.domain]
@@ -340,6 +340,9 @@ func Lines(hits []Hit) string {
 		tag := "K" + fmt.Sprint(h.ID) + " · " + kindLabel[h.Kind]
 		if h.Domain != "" {
 			tag += " · " + h.Domain
+		}
+		if h.AppliesTo != "" {
+			tag += " · berlaku " + h.AppliesTo
 		}
 		fmt.Fprintf(&b, "- [%s] %s: %s", tag, h.Title, clip(h.Content, 320))
 		if h.Helpful+h.Harmful > 0 {

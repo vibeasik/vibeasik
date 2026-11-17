@@ -21,6 +21,7 @@ import (
 //  3. promosikan pengetahuan pribadi yang terbukti berguna (✓ kuat ≥3, utilitas bukti kuat ≥0.75) ke pustaka bersama
 //  4. pangkas node asli yang terbukti merugikan (bukti kuat saja); patokan berkas yang sering keliru ditandai perlu
 //     ditinjau. Bukti lemah (node hanya ikut hasil pekerjaan) hanya menggeser peringkat, tidak mempromosikan/memensiunkan.
+//     Node yang kedaluwarsa atau penggantinya tidak aktif lagi ditandai perlu ditinjau (validity.go).
 //  5. hitung ulang tautan (3 tetangga terdekat) & klaster konsep
 //  6. tutup pemakaian yang tidak akan pernah dinilai sebagai netral (SettleStale)
 //  7. buang catatan pemakaian > 30 hari
@@ -32,6 +33,7 @@ type Report struct {
 	Promoted int    `json:"promoted"`
 	Retired  int    `json:"retired"`
 	Flagged  int    `json:"flagged"`
+	Outdated int    `json:"outdated"` // tanda perlu ditinjau baru karena masa berlaku
 	Links    int    `json:"links"`
 	Clusters int    `json:"clusters"`
 	Settled  int    `json:"settled"`
@@ -92,6 +94,7 @@ func Curate(db *gorm.DB) Report {
 	r.Merged = mergeDuplicates(db)
 	r.Promoted = promote(db)
 	r.Retired, r.Flagged = prune(db)
+	r.Outdated = flagOutdated(db, time.Now())
 	ix := current(db)
 	r.Nodes = ix.n
 	r.Links = relink(db, ix)
@@ -115,17 +118,22 @@ func loadActive(db *gorm.DB, q func(*gorm.DB) *gorm.DB) map[uint]models.Knowledg
 func strength(n models.KnowledgeNode) int { return n.Weight + 5*(n.Helpful-n.Harmful) + n.Uses }
 
 // mergeDuplicates melebur node asli yang hampir sama di lingkup pemilik yang sama: bukti dijumlah, isi dilengkapi.
+// Node yang digantikan atau kedaluwarsa tidak ikut dilebur: isinya sengaja disimpan terpisah dari penggantinya.
+// Node yang digantikan node yang dilebur diarahkan ke node yang dipertahankan.
 func mergeDuplicates(db *gorm.DB) int {
 	ix := current(db)
 	nodes := loadActive(db, func(q *gorm.DB) *gorm.DB { return q.Where("source_key = '' OR source_key LIKE 'promoted:%'") })
 	done := map[uint]bool{}
 	merged := 0
+	now := time.Now()
 	for _, e := range ix.entries {
 		a, ok := nodes[e.id]
-		if !ok || done[e.id] {
+		if !ok || done[e.id] || !e.inForce(now) {
 			continue
 		}
-		for _, nb := range ix.nearest(e.v, 4, mergeMin, func(o *entry) bool { return o.id == e.id || o.owner != e.owner || done[o.id] }) {
+		for _, nb := range ix.nearest(e.v, 4, mergeMin, func(o *entry) bool {
+			return o.id == e.id || o.owner != e.owner || done[o.id] || !o.inForce(now)
+		}) {
 			b, ok := nodes[nb.e.id]
 			if !ok {
 				continue
@@ -148,6 +156,8 @@ func mergeDuplicates(db *gorm.DB) int {
 			db.Model(&models.KnowledgeNode{}).Where("id = ?", drop.ID).Updates(map[string]interface{}{
 				"status": models.KnowledgeNodeMerged, "merged_into_id": keep.ID, "status_reason": "Dilebur ke K" + itoa(keep.ID) + " (" + clip(keep.Title, 80) + ")",
 			})
+			db.Model(&models.KnowledgeNode{}).Where("superseded_by_id = ? AND id <> ?", drop.ID, keep.ID).
+				Updates(map[string]interface{}{"superseded_by_id": keep.ID})
 			nodes[keep.ID] = keep
 			done[drop.ID] = true
 			merged++
@@ -199,8 +209,9 @@ func promote(db *gorm.DB) int {
 	var rows []models.KnowledgeNode
 	db.Where("status = ? AND owner_employee_id IS NOT NULL AND helpful >= ?", models.KnowledgeNodeActive, promoteMinHelpful).Find(&rows)
 	n := 0
+	now := time.Now()
 	for _, r := range rows {
-		if !promotable(r) {
+		if !promotable(r) || !NodeInForce(r, now) {
 			continue
 		}
 		_, created, err := upsertKey(db, Note{
@@ -234,8 +245,9 @@ func prune(db *gorm.DB) (retired, flagged int) {
 	}
 	var recovered []models.KnowledgeNode
 	db.Where("status = ? AND needs_review = ?", models.KnowledgeNodeActive, true).Find(&recovered)
+	outdated := outdatedNodes(db, time.Now())
 	for _, n := range recovered {
-		if n.StrongUtility() >= recoverMinUtility {
+		if _, stale := outdated[n.ID]; !stale && n.StrongUtility() >= recoverMinUtility {
 			db.Model(&n).UpdateColumn("needs_review", false)
 		}
 	}

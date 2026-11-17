@@ -38,6 +38,11 @@ type Note struct {
 	OwnerEmployeeID *uint    `json:"owner_employee_id,omitempty"`
 	OwnerName       string   `json:"owner_name,omitempty"`
 	Weight          int      `json:"weight"`
+	// Masa berlaku (hanya Learn): AppliesTo = batas berlaku dalam teks pendek, ValidUntil = batas waktu,
+	// Supersedes = node yang digantikan butir ini (lihat Supersede).
+	AppliesTo  string     `json:"applies_to,omitempty"`
+	ValidUntil *time.Time `json:"valid_until,omitempty"`
+	Supersedes uint       `json:"supersedes,omitempty"`
 }
 
 const (
@@ -69,6 +74,7 @@ func (n *Note) normalize() error {
 		n.Weight = 60
 	}
 	n.Weight = clamp(n.Weight, 1, 100)
+	n.AppliesTo = normAppliesTo(n.AppliesTo)
 	return nil
 }
 
@@ -92,6 +98,9 @@ func ownerOf(p *uint) uint {
 // pegawai yang sama) sudah ada butir yang hampir sama, butir itu diperkuat (bukti +1, bobot naik, isi dilengkapi)
 // alih-alih digandakan. Node baru langsung ditautkan ke tetangga terdekatnya & mengisi celah domainnya.
 // Mengembalikan node yang tersimpan dan apakah ia peleburan ke node lama.
+//
+// Note.Supersedes menandai node lama digantikan node hasil Learn (yang baru, atau yang diperkuat). Node yang sudah
+// digantikan, kedaluwarsa, atau yang hendak digantikan tidak dipakai sebagai duplikat untuk diperkuat.
 func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 	if db == nil {
 		return nil, false, errors.New("database belum siap")
@@ -100,22 +109,37 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 	if err := n.normalize(); err != nil {
 		return nil, false, err
 	}
+	if n.Supersedes != 0 {
+		var old models.KnowledgeNode
+		if db.Where("id = ?", n.Supersedes).Limit(1).Find(&old).Error != nil || old.ID == 0 {
+			return nil, false, fmt.Errorf("node %d yang hendak digantikan tidak ditemukan", n.Supersedes)
+		}
+		if err := checkSupersede(&old, n.OwnerEmployeeID, n.Source); err != nil {
+			return nil, false, err
+		}
+	}
 	ix := current(db)
 	v := ix.noteVector(n.Title, n.Content, n.Domain, n.Tags)
 	owner := ownerOf(n.OwnerEmployeeID)
-	dups := ix.nearest(v, 1, dupMin, func(e *entry) bool { return e.owner != owner })
+	now := time.Now()
+	dups := ix.nearest(v, 1, dupMin, func(e *entry) bool { return e.owner != owner || e.id == n.Supersedes || !e.inForce(now) })
 	if len(dups) > 0 {
 		var old models.KnowledgeNode
 		if db.First(&old, dups[0].e.id).Error == nil {
-			return reinforce(db, &old, n), true, nil
+			kept := reinforce(db, &old, n)
+			return kept, true, supersedeBy(db, n.Supersedes, kept.ID)
 		}
 	}
 	node := models.KnowledgeNode{
 		Kind: n.Kind, Domain: n.Domain, Tags: n.Tags, Title: n.Title, Content: n.Content, Source: n.Source,
 		OwnerEmployeeID: n.OwnerEmployeeID, OwnerName: clip(n.OwnerName, 120), Weight: n.Weight, Status: models.KnowledgeNodeActive,
+		AppliesTo: n.AppliesTo, ValidUntil: n.ValidUntil,
 	}
 	if err := db.Create(&node).Error; err != nil {
 		return nil, false, err
+	}
+	if err := supersedeBy(db, n.Supersedes, node.ID); err != nil {
+		return &node, false, err
 	}
 	var links []models.KnowledgeLink
 	for _, nb := range ix.nearest(v, linksPerNew, linkMin, func(e *entry) bool { return e.owner != 0 && e.owner != owner }) {
@@ -129,8 +153,19 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 	return &node, false, nil
 }
 
+// supersedeBy: lanjutan Learn dengan Note.Supersedes (0 = tidak ada).
+func supersedeBy(db *gorm.DB, oldID, newID uint) error {
+	if oldID == 0 {
+		return nil
+	}
+	if _, err := Supersede(db, oldID, newID, "dicatat lewat Learn"); err != nil {
+		return fmt.Errorf("K%d tersimpan, tetapi K%d tidak bisa ditandai digantikan: %w", newID, oldID, err)
+	}
+	return nil
+}
+
 // reinforce: butir yang muncul lagi = bukti tambahan. Node bersumber berkas (guideline, checklist, pegawai) hanya
-// diberi bukti; isinya tetap milik sumbernya.
+// diberi bukti; isinya tetap milik sumbernya. Keterangan berlaku-untuk hanya diisi bila node lama belum punya.
 func reinforce(db *gorm.DB, old *models.KnowledgeNode, n Note) *models.KnowledgeNode {
 	updates := map[string]interface{}{"helpful": gorm.Expr("helpful + 1")}
 	old.Helpful++
@@ -138,6 +173,10 @@ func reinforce(db *gorm.DB, old *models.KnowledgeNode, n Note) *models.Knowledge
 		old.Weight = clamp(max(old.Weight, n.Weight)+3, 1, 99)
 		old.Content = synthesize(old.Content, n.Content)
 		updates["weight"], updates["content"] = old.Weight, old.Content
+		if old.AppliesTo == "" && n.AppliesTo != "" {
+			old.AppliesTo = n.AppliesTo
+			updates["applies_to"] = old.AppliesTo
+		}
 		db.Model(old).Updates(updates)
 		invalidate()
 		return old
