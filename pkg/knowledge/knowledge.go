@@ -17,6 +17,7 @@ package knowledge
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -329,55 +330,212 @@ func recordUse(db *gorm.DB, ctx string, employeeID uint, ids []uint) {
 }
 
 // Reward menilai node yang dipakai di sebuah konteks begitu hasil kerjanya diketahui (nilai QA 0–100, vonis audit):
-// ≥75 = membantu, <50 = merugikan, di antaranya netral. Mengembalikan jumlah pemakaian yang dinilai. Node sumber
-// berkedudukan tinggi (models.AuthoritativeSources, mis. Galeri Desain) tetap tercatat hasilnya, tetapi ✓/✗-nya
-// tidak berubah: hasil kerja pegawai tidak boleh menggeser pengetahuan di atasnya.
+// ≥75 = membantu, <50 = merugikan, di antaranya netral. Untuk konteks todo:<id>, node yang dikutip agent di baris
+// "PENGETAHUAN: K<id>" catatan penyelesaian todo itu ikut dibaca (lihat RewardCited). Mengembalikan jumlah
+// pemakaian yang dinilai.
 func Reward(db *gorm.DB, ctx string, score int) int {
 	if db == nil || ctx == "" {
 		return 0
 	}
-	outcome := models.KnowledgeOutcomeNeutral
-	switch {
-	case score >= 75:
-		outcome = models.KnowledgeOutcomeHelpful
-	case score < 50:
-		outcome = models.KnowledgeOutcomeHarmful
+	return RewardCited(db, ctx, score, TodoCitations(db, ctx))
+}
+
+// RewardCited menilai pemakaian yang belum dinilai di ctx dengan membedakan kekuatan buktinya:
+//   - hasil bagus: node yang disisipkan DAN dikutip (cited) mendapat ✓ kuat (sekali per konteks); node lain yang
+//     hanya ikut disisipkan mendapat ✓ lemah;
+//   - hasil buruk: semua node yang disisipkan hanya mendapat ✗ lemah. Nilai todo yang rendah tidak menunjukkan
+//     node mana yang keliru (bisa karena build, alat, lingkungan, atau cara kerja agent), jadi ✗ kuat hanya datang
+//     dari vonis eksplisit (Judge, Feedback);
+//   - node yang sudah divonis penilai di ctx (Judge) tidak dinilai lagi: pemakaiannya mengikuti vonis itu.
+//
+// Kutipan atas node yang tidak disisipkan ke ctx diabaikan: tidak ada bukti node itu benar-benar ditampilkan.
+// Node sumber berkedudukan tinggi (models.AuthoritativeSources, mis. Galeri Desain) tetap tercatat hasilnya, tetapi
+// penghitungnya tidak berubah: hasil kerja pegawai tidak boleh menggeser pengetahuan di atasnya.
+func RewardCited(db *gorm.DB, ctx string, score int, cited []uint) int {
+	if db == nil || ctx == "" {
+		return 0
 	}
+	outcome := scoreOutcome(score)
 	var ids []uint
 	db.Model(&models.KnowledgeUse{}).Where("context = ? AND outcome = ?", ctx, "").Pluck("node_id", &ids)
 	if len(ids) == 0 {
 		return 0
 	}
-	db.Model(&models.KnowledgeUse{}).Where("context = ? AND outcome = ?", ctx, "").Update("outcome", outcome)
-	if col := map[string]string{models.KnowledgeOutcomeHelpful: "helpful", models.KnowledgeOutcomeHarmful: "harmful"}[outcome]; col != "" {
-		db.Model(&models.KnowledgeNode{}).Where("id IN ? AND source NOT IN ?", ids, models.AuthoritativeSources).UpdateColumn(col, gorm.Expr(col+" + 1"))
+	judged := verdictsIn(db, ctx, ids)
+	var strongDone []uint
+	db.Model(&models.KnowledgeUse{}).Where("context = ? AND node_id IN ? AND evidence IN ?", ctx, ids,
+		[]string{models.KnowledgeEvidenceVerdict, models.KnowledgeEvidenceCited}).Pluck("node_id", &strongDone)
+	done := toSet(strongDone)
+	isCited := toSet(cited)
+	var strong, weak, judgedOK, judgedBad []uint
+	for _, id := range ids {
+		switch v, ok := judged[id]; {
+		case ok && v:
+			judgedOK = append(judgedOK, id)
+		case ok:
+			judgedBad = append(judgedBad, id)
+		case outcome == models.KnowledgeOutcomeHelpful && isCited[id] && !done[id]:
+			strong = append(strong, id)
+		default:
+			weak = append(weak, id)
+		}
+	}
+	mark := func(nodes []uint, outcome, evidence string) {
+		if len(nodes) > 0 {
+			db.Model(&models.KnowledgeUse{}).Where("context = ? AND outcome = ? AND node_id IN ?", ctx, "", nodes).
+				Updates(map[string]interface{}{"outcome": outcome, "evidence": evidence})
+		}
+	}
+	mark(judgedOK, models.KnowledgeOutcomeHelpful, models.KnowledgeEvidenceVerdict)
+	mark(judgedBad, models.KnowledgeOutcomeHarmful, models.KnowledgeEvidenceVerdict)
+	mark(strong, outcome, models.KnowledgeEvidenceCited)
+	mark(weak, outcome, models.KnowledgeEvidenceOutcome)
+	switch outcome {
+	case models.KnowledgeOutcomeHelpful:
+		bump(db, strong, "helpful", 1)
+		bump(db, weak, "weak_helpful", 1)
+	case models.KnowledgeOutcomeHarmful:
+		bump(db, weak, "weak_harmful", 1)
 	}
 	return len(ids)
 }
 
+// TodoCitations: node yang dikutip di baris "PENGETAHUAN: K<id>" catatan penyelesaian todo (todos.rationale)
+// untuk konteks todo:<id>; konteks lain atau todo yang tidak terbaca → kosong.
+func TodoCitations(db *gorm.DB, ctx string) []uint {
+	if db == nil || !strings.HasPrefix(ctx, "todo:") {
+		return nil
+	}
+	id, err := strconv.ParseUint(strings.TrimPrefix(ctx, "todo:"), 10, 64)
+	if err != nil || id == 0 {
+		return nil
+	}
+	var t models.Todo
+	if db.Select("id", "rationale").Where("id = ?", id).Limit(1).Find(&t).Error != nil || t.ID == 0 {
+		return nil
+	}
+	return CitedNodes(t.Rationale)
+}
+
+func scoreOutcome(score int) string {
+	switch {
+	case score >= 75:
+		return models.KnowledgeOutcomeHelpful
+	case score < 50:
+		return models.KnowledgeOutcomeHarmful
+	}
+	return models.KnowledgeOutcomeNeutral
+}
+
+// bump menambah (delta > 0) atau mengurangi (delta < 0, tidak sampai negatif) penghitung bukti node; node sumber
+// berkedudukan tinggi tidak berubah.
+func bump(db *gorm.DB, ids []uint, col string, delta int) {
+	if len(ids) == 0 || delta == 0 {
+		return
+	}
+	q := db.Model(&models.KnowledgeNode{}).Where("id IN ? AND source NOT IN ?", ids, models.AuthoritativeSources)
+	if delta < 0 {
+		q = q.Where(col+" >= ?", -delta)
+	}
+	q.UpdateColumn(col, gorm.Expr(col+" + ?", delta))
+}
+
+func toSet(ids []uint) map[uint]bool {
+	out := make(map[uint]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out
+}
+
+// verdictsIn: vonis terakhir penilai di ctx untuk node ids (true = ✓). Tabel belum ada → kosong.
+func verdictsIn(db *gorm.DB, ctx string, ids []uint) map[uint]bool {
+	out := map[uint]bool{}
+	if ctx == "" || len(ids) == 0 {
+		return out
+	}
+	var rows []models.KnowledgeVerdict
+	if db.Select("node_id", "helpful").Where("context = ? AND node_id IN ?", ctx, ids).Find(&rows).Error != nil {
+		return out
+	}
+	for _, r := range rows {
+		out[r.NodeID] = r.Helpful
+	}
+	return out
+}
+
 // Judge mencatat penilaian eksplisit per node (peran "Reflector" ACE: penilai menunjuk butir mana yang tepat
-// dan mana yang keliru). true → ✓, false → ✗. Pemakaian node itu di konteks ctx yang belum dinilai ditandai,
-// sehingga Reward berbasis nilai tidak menghitungnya dua kali. Node yang tidak dipakai di ctx tetap dinilai.
-// Node sumber berkedudukan tinggi (models.AuthoritativeSources) tidak berubah.
+// dan mana yang keliru). true → ✓ kuat, false → ✗ kuat. Satu konteks memberi paling banyak satu vonis per node:
+// penilaian ulang yang sama (putaran QA gate berikutnya, review berkala) tidak menambah bukti, vonis yang berubah
+// memindahkan buktinya. Pemakaian node itu di ctx ditandai berasal dari vonis, sehingga Reward tidak menghitungnya
+// lagi. Node yang tidak dipakai di ctx tetap dinilai. Tanpa ctx setiap panggilan adalah bukti baru. Node sumber
+// berkedudukan tinggi (models.AuthoritativeSources) tidak berubah. Mengembalikan jumlah vonis baru atau berubah.
 func Judge(db *gorm.DB, ctx string, verdicts map[uint]bool) int {
 	if db == nil || len(verdicts) == 0 {
 		return 0
 	}
-	n := 0
-	for id, ok := range verdicts {
-		col, outcome := "harmful", models.KnowledgeOutcomeHarmful
-		if ok {
-			col, outcome = "helpful", models.KnowledgeOutcomeHelpful
-		}
-		if db.Model(&models.KnowledgeNode{}).Where("id = ? AND source NOT IN ?", id, models.AuthoritativeSources).UpdateColumn(col, gorm.Expr(col+" + 1")).RowsAffected == 0 {
+	ids := make([]uint, 0, len(verdicts))
+	for id := range verdicts {
+		ids = append(ids, id)
+	}
+	var valid []uint
+	if db.Model(&models.KnowledgeNode{}).Where("id IN ? AND source NOT IN ?", ids, models.AuthoritativeSources).Pluck("id", &valid).Error != nil {
+		return 0
+	}
+	prev := verdictsIn(db, ctx, valid)
+	var incOK, incBad, decOK, decBad []uint
+	var fresh []models.KnowledgeVerdict
+	for _, id := range valid {
+		ok := verdicts[id]
+		old, had := prev[id]
+		if ctx != "" && had && old == ok {
 			continue
 		}
-		if ctx != "" {
-			db.Model(&models.KnowledgeUse{}).Where("context = ? AND node_id = ? AND outcome = ?", ctx, id, "").Update("outcome", outcome)
+		if ok {
+			incOK = append(incOK, id)
+		} else {
+			incBad = append(incBad, id)
 		}
-		n++
+		switch {
+		case ctx == "":
+		case !had:
+			fresh = append(fresh, models.KnowledgeVerdict{Context: clip(ctx, 190), NodeID: id, Helpful: ok})
+		case old:
+			decOK = append(decOK, id)
+		default:
+			decBad = append(decBad, id)
+		}
 	}
-	return n
+	bump(db, incOK, "helpful", 1)
+	bump(db, incBad, "harmful", 1)
+	bump(db, decOK, "helpful", -1)
+	bump(db, decBad, "harmful", -1)
+	if ctx == "" {
+		return len(incOK) + len(incBad)
+	}
+	if len(fresh) > 0 {
+		db.Create(&fresh)
+	}
+	flip := func(nodes []uint, ok bool) {
+		if len(nodes) == 0 {
+			return
+		}
+		db.Model(&models.KnowledgeVerdict{}).Where("context = ? AND node_id IN ?", ctx, nodes).
+			Updates(map[string]interface{}{"helpful": ok, "updated_at": time.Now()})
+	}
+	flip(decBad, true) // ✗ → ✓
+	flip(decOK, false) // ✓ → ✗
+	mark := func(nodes []uint, outcome string) {
+		if len(nodes) == 0 {
+			return
+		}
+		db.Model(&models.KnowledgeUse{}).
+			Where("context = ? AND node_id IN ? AND (outcome = ? OR evidence = ?)", ctx, nodes, "", models.KnowledgeEvidenceVerdict).
+			Updates(map[string]interface{}{"outcome": outcome, "evidence": models.KnowledgeEvidenceVerdict})
+	}
+	mark(incOK, models.KnowledgeOutcomeHelpful)
+	mark(incBad, models.KnowledgeOutcomeHarmful)
+	return len(incOK) + len(incBad)
 }
 
 func clip(s string, n int) string {
@@ -400,7 +558,7 @@ func clamp(v, lo, hi int) int {
 
 func round3(f float64) float64 { return float64(int(f*1000+0.5)) / 1000 }
 
-// Utilities mengembalikan utilitas Beta ((✓+1)/(✓+✗+2)) node aktif menurut kunci sumbernya. Kunci yang belum ada
+// Utilities mengembalikan utilitas Beta (KnowledgeNode.Utility) node aktif menurut kunci sumbernya. Kunci yang belum ada
 // sebagai node tidak muncul di hasil (pemanggil memakai 0.5 sebagai prior). Tabel belum ada → hasil kosong.
 func Utilities(db *gorm.DB, keys []string) map[string]float64 {
 	out := map[string]float64{}
@@ -408,7 +566,7 @@ func Utilities(db *gorm.DB, keys []string) map[string]float64 {
 		return out
 	}
 	var nodes []models.KnowledgeNode
-	if db.Select("source_key", "helpful", "harmful").Where("source_key IN ? AND status = ?", keys, models.KnowledgeNodeActive).Find(&nodes).Error != nil {
+	if db.Select("source_key", "helpful", "harmful", "weak_helpful", "weak_harmful").Where("source_key IN ? AND status = ?", keys, models.KnowledgeNodeActive).Find(&nodes).Error != nil {
 		return out
 	}
 	for _, n := range nodes {

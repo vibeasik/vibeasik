@@ -42,7 +42,8 @@ Tabel `knowledge_nodes` (model `models.KnowledgeNode`):
 | `source_key` | Identitas di sumbernya, mis. `guideline:SEC-001`, `audit:go:2`, `employee:15`, `promoted:40`, `design:ref:7`, `design:profile:purposes:ecommerce` (Galeri Desain + facet, Aturan 36); kosong = node asli pusat |
 | `owner_employee_id` | Terisi = keahlian **pribadi** pegawai itu; kosong = **pustaka bersama** kantor |
 | `weight` | Kepentingan awal 0–100 |
-| `helpful` / `harmful` | Bukti ✓/✗ dari hasil kerja |
+| `helpful` / `harmful` | Bukti **kuat** ✓/✗: vonis per node (penilai QA, umpan balik, vonis audit) atau node yang dikutip agent di baris `PENGETAHUAN:` todo yang lulus |
+| `weak_helpful` / `weak_harmful` | Bukti **lemah** ✓/✗: node hanya ikut disisipkan ke pekerjaan yang hasilnya bagus/buruk |
 | `uses`, `last_used_at` | Berapa kali & kapan terakhir disisipkan ke prompt |
 | `cluster_id` | Klaster konsep |
 | `needs_review` | Patokan berkas yang berulang kali keliru — berkasnya perlu diperbaiki |
@@ -61,14 +62,14 @@ Tabel pendukung: `knowledge_links` (tautan antar node), `knowledge_clusters`, `k
 | 2 | **Tokenizer ID↔EN + camelCase** | "validasi" bisa menemukan "validation", `fetchUserData` dipecah | — | `vector.go` |
 | 3 | **Posting list (indeks terbalik)** | Mencari tetangga terdekat tanpa membandingkan semua pasangan | IR klasik | `vector.go` `nearest` |
 | 4 | **Skor gabungan relevansi + utilitas + kepentingan + kebaruan** | Memilih node paling berguna | Generative Agents (Park dkk., 2023) | `recall.go` |
-| 5 | **Utilitas Beta (Bayes)** `(✓+1)/(✓+✗+2)` | Seberapa terbukti node berguna; node baru = 0,5 | ACE (ICLR 2026), ExpeL (2024) | `models.KnowledgeNode.Utility` |
+| 5 | **Utilitas Beta (Bayes)** `(✓+1+¼✓ₗ)/(✓+✗+2+¼(✓ₗ+✗ₗ))` | Seberapa terbukti node berguna; node baru = 0,5; bukti lemah berbobot 0,25 | ACE (ICLR 2026), ExpeL (2024) | `models.KnowledgeNode.Utility` |
 | 6 | **Peluruhan eksponensial** `e^(−hari/45)` | Node yang lama tidak dipakai turun pelan | MemoryBank / kurva lupa | `recall.go` |
 | 7 | **Aktivasi menyebar 1 langkah** | Tetangga bertaut dari node teratas ikut dipertimbangkan | HippoRAG, A-MEM | `recall.go` `expand` |
 | 8 | **Tautan Zettelkasten (k-tetangga terdekat, k=3)** | Menghubungkan node yang isinya berdekatan | A-MEM (NeurIPS 2025) | `knowledge.go`, `curate.go` `relink` |
 | 9 | **Leader clustering satu lintasan** (kosinus ≥ 0,3) | Mengelompokkan node per konsep + label kata pusat | RAPTOR / GraphRAG versi ringan | `curate.go` `recluster` |
 | 10 | **Dedup & peleburan** (kosinus ≥ 0,8 saat tulis, ≥ 0,85 saat kurasi) | Memori berkembang, bukan berlipat | ACE (pembaruan delta), ExpeL (upvote) | `knowledge.go`, `curate.go` |
 | 11 | **Kurikulum otomatis dari celah** | Hal baru → agenda belajar → node baru | Voyager (2023) | `gaps.go`, `staff/knowledge_gaps.go` |
-| 12 | **Penilaian kredit dari hasil** | Nilai QA / vonis audit membagi ✓/✗ ke node yang dipakai | ACE (generator → reflector → curator) | `knowledge.go` `Reward`, `verdict.go` |
+| 12 | **Penilaian kredit dari hasil** | Nilai QA / vonis audit memberi ✓/✗ ke node yang dipakai, dibedakan kuat (dikutip/divonis) dan lemah (hanya ikut) | ACE (generator → reflector → curator) | `knowledge.go` `Reward`, `Judge`, `verdict.go` |
 
 Semuanya murni Go (tanpa CGO, tanpa layanan embedding luar) sesuai Aturan 2.
 
@@ -200,14 +201,21 @@ Bila Pusat Pengetahuan kosong untuk pegawai itu, prompt kembali ke cara lama (`r
 
 | Kejadian | Fungsi | Efek |
 |---|---|---|
-| **Review QA menilai todo** (0–100) | `rewardTodoKnowledge` → `Reward("todo:<id>", nilai)` | Semua node yang dipakai di prompt todo itu: nilai ≥ 75 → ✓+1, < 50 → ✗+1, 50–74 netral |
-| **Vonis audit "temuan benar"** | `LearnFromVerdict` | Node yang dipakai review LLM berkas itu dinilai 85 (✓); patokan dasarnya ✓+1; alasan → pelajaran "Masalah nyata: …" |
-| **Vonis audit "audit keliru"** | `LearnFromVerdict` | Node yang dipakai dinilai 35 (✗); patokan dasarnya ✗+1; alasan + saran rule → pelajaran "Bukan masalah: …" |
-| **Umpan balik langsung** | `Feedback` (studio 👍/👎, MCP `vibeasik_knowledge_feedback`) | ✓+1 atau ✗+1 |
+| **Review QA menilai todo** (0–100) | `Reward("todo:<id>", nilai)` / `RewardCited` | Nilai ≥ 75: node yang disisipkan **dan** dikutip di baris `PENGETAHUAN: K<id>` catatan penyelesaian → ✓ kuat (sekali per todo), node lain yang disisipkan → ✓ lemah. Nilai < 50: semua node yang disisipkan → ✗ lemah saja (nilai rendah tidak menunjuk node mana yang keliru). 50–74 netral. Node yang sudah divonis penilai di todo itu mengikuti vonisnya |
+| **Penilai menilai patokan** | `Judge("todo:<id>", vonis)` | `followed` → ✓ kuat, `wrong` → ✗ kuat; satu vonis per node per todo (putaran ulang yang sama tidak menambah, vonis yang berubah memindahkan bukti; tabel `knowledge_verdicts`) |
+| **Vonis audit "temuan benar"** | `LearnFromVerdict` | Node yang dipakai review LLM berkas itu dinilai 85 (✓ lemah); patokan dasarnya ✓+1 kuat; alasan → pelajaran "Masalah nyata: …" |
+| **Vonis audit "audit keliru"** | `LearnFromVerdict` | Node yang dipakai dinilai 35 (✗ lemah); patokan dasarnya ✗+1 kuat; alasan + saran rule → pelajaran "Bukan masalah: …" |
+| **Umpan balik langsung** | `Feedback` (studio 👍/👎, MCP `vibeasik_knowledge_feedback`) | ✓+1 atau ✗+1 kuat |
 | **Butir yang sama ditulis lagi** | `Learn` (kemiripan ≥ 0,8) | Node lama diperkuat: ✓+1, bobot +3, isinya dilengkapi |
 
 "Patokan dasar" sebuah temuan = node `guideline:<RuleID>` bila ada; untuk temuan review LLM = checklist audit
 ekosistem itu yang isinya paling mirip judul & deskripsi temuan (kemiripan ≥ 0,2).
+
+Asal bukti setiap pemakaian dicatat di `knowledge_uses.evidence`: `verdict`, `cited` (kuat) atau `outcome`
+(lemah). Bukti lemah hanya menggeser utilitas di peringkat; promosi dan pangkas memakai bukti kuat saja
+(`StrongUtility`). Pemakaian yang dinilai sebelum kolom itu ada dipilah ulang dengan
+`vibeasik knowledge evidence` (kering) / `--apply`: ✓ yang dikutip tetap kuat, sisanya pindah ke penghitung
+lemah. Catatan pemakaian hanya disimpan 30 hari, jadi bukti yang lebih tua tidak bisa dipilah lagi.
 
 ### Kurator (tiap 15 menit, atau tombol **Kurasi sekarang**)
 
@@ -215,9 +223,9 @@ Urutan dalam `Curate`:
 1. **Sinkron sumber** (guidelines, checklist audit, pengetahuan pegawai).
 2. **Lebur duplikat**: node asli dengan kemiripan ≥ 0,85 di lingkup pemilik yang sama → yang lebih kuat
    (`bobot + 5×(✓−✗) + uses`) dipertahankan, bukti dijumlahkan, yang lain berstatus `merged`.
-3. **Promosi**: keahlian pribadi pegawai dengan ✓ ≥ 3 dan utilitas ≥ 0,75 disalin ke pustaka bersama
+3. **Promosi**: keahlian pribadi pegawai dengan ✓ kuat ≥ 3 dan utilitas bukti kuat ≥ 0,75 disalin ke pustaka bersama
    (sumber `promoted`, kredit nama pegawai) — pegawai lain bisa langsung memakainya.
-4. **Pangkas**: node asli dengan ✗ ≥ 3 dan utilitas < 0,3 → `retired`. Patokan berkas (guideline/checklist)
+4. **Pangkas** (bukti kuat saja): node asli dengan ✗ ≥ 3 dan utilitas < 0,3 → `retired`. Patokan berkas (guideline/checklist)
    dengan ✗ ≥ 3 dan utilitas < 0,4 hanya ditandai **perlu ditinjau** (berkasnya yang harus diperbaiki); tanda
    dilepas lagi bila utilitasnya pulih ≥ 0,5.
 5. **Hitung ulang tautan**: tiap node ke 3 tetangga terdekat (kemiripan ≥ 0,25).
@@ -241,7 +249,8 @@ Review QA batch (`staff/review.go`) dan QA gate sebelum merge (`staff/gate.go`) 
 2. **Patokan kantor** relevan (≤ 8–10 butir K<id> dari Pusat Pengetahuan) ikut di prompt penilai. Penilai
    memberi status per butir: `followed` → ✓, `wrong` (patokannya keliru untuk kasus ini) → ✗,
    `violated` (hasil kerja melanggar — patokannya tetap benar) dan `n/a` → tanpa perubahan (`knowledge.Judge`).
-   Node yang sudah dinilai eksplisit tidak dinilai dua kali oleh `Reward`.
+   Node yang sudah dinilai eksplisit tidak dinilai dua kali oleh `Reward`, dan penilaian ulang di todo yang sama
+   (putaran gate berikutnya, review berkala) tidak menambah bukti.
 3. **Best practice wajib**: penilai menulis "Seharusnya: …" (cara ideal) — masuk komentar QA dan catatan
    rework agent berikutnya.
 4. **Pelajaran umum** dari penilai (maks 3 per review, 2 per putaran gate) masuk **pustaka bersama**

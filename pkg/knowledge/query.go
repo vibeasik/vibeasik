@@ -37,7 +37,7 @@ type DomainStat struct {
 // GetOverview menghitung ringkasan pusat.
 func GetOverview(db *gorm.DB) Overview {
 	var rows []models.KnowledgeNode
-	db.Select("id", "kind", "source", "domain", "owner_employee_id", "helpful", "harmful").Where("status = ?", models.KnowledgeNodeActive).Find(&rows)
+	db.Select("id", "kind", "source", "domain", "owner_employee_id", "helpful", "harmful", "weak_helpful", "weak_harmful").Where("status = ?", models.KnowledgeNodeActive).Find(&rows)
 	o := Overview{Total: len(rows), ByKind: map[string]int{}, BySource: map[string]int{}}
 	domains := map[string]int{}
 	util := 0.0
@@ -220,7 +220,7 @@ func GetGraph(db *gorm.DB, limit int) Graph {
 		limit = 800
 	}
 	var rows []models.KnowledgeNode
-	db.Select("id", "title", "kind", "domain", "source", "cluster_id", "owner_employee_id", "weight", "helpful", "harmful", "uses").
+	db.Select("id", "title", "kind", "domain", "source", "cluster_id", "owner_employee_id", "weight", "helpful", "harmful", "weak_helpful", "weak_harmful", "uses").
 		Where("status = ?", models.KnowledgeNodeActive).
 		Order("weight + 5 * (helpful - harmful) + uses DESC, id ASC").Limit(limit).Find(&rows)
 	g := Graph{Nodes: make([]GraphNode, 0, len(rows)), Links: []GraphLink{}}

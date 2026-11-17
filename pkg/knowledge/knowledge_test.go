@@ -21,7 +21,7 @@ func testDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(&models.KnowledgeNode{}, &models.KnowledgeLink{}, &models.KnowledgeCluster{}, &models.KnowledgeUse{},
-		&models.KnowledgeGap{}, &models.Employee{}, &models.EmployeeKnowledge{}, &models.EmployeeAgenda{}); err != nil {
+		&models.KnowledgeVerdict{}, &models.KnowledgeGap{}, &models.Employee{}, &models.EmployeeKnowledge{}, &models.EmployeeAgenda{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -147,8 +147,8 @@ func TestRecallRecordsUseAndReward(t *testing.T) {
 	}
 	var node models.KnowledgeNode
 	db.First(&node, ids["fl-dispose"])
-	if node.Helpful != 1 || node.Uses != 1 {
-		t.Fatalf("node terpakai di todo bernilai bagus harus helpful+1 & uses 1, dapat helpful=%d uses=%d", node.Helpful, node.Uses)
+	if node.WeakHelpful != 1 || node.Helpful != 0 || node.Uses != 1 {
+		t.Fatalf("node terpakai (tanpa dikutip) di todo bernilai bagus harus ✓ lemah +1 & uses 1, dapat helpful=%d weak=%d uses=%d", node.Helpful, node.WeakHelpful, node.Uses)
 	}
 	if Reward(db, "todo:9", 20) != 0 {
 		t.Fatal("pemakaian yang sudah dinilai tidak dinilai dua kali")

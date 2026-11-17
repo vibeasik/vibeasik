@@ -71,10 +71,14 @@ type KnowledgeNode struct {
 	// OwnerEmployeeID: pengetahuan pribadi pegawai; nil = pustaka bersama seluruh kantor.
 	OwnerEmployeeID *uint  `gorm:"index" json:"owner_employee_id,omitempty"`
 	OwnerName       string `gorm:"size:128" json:"owner_name,omitempty"`
-	// Weight: kepentingan awal 0–100. Helpful/Harmful: bukti dari hasil kerja (nilai QA, vonis audit, umpan balik).
+	// Weight: kepentingan awal 0–100. Helpful/Harmful: bukti KUAT — vonis per node (penilai QA, umpan balik,
+	// vonis audit) atau node yang dikutip agent di baris PENGETAHUAN todo yang lulus. WeakHelpful/WeakHarmful:
+	// bukti LEMAH — node hanya ikut disisipkan ke pekerjaan yang hasilnya bagus/buruk (lihat KnowledgeWeakWeight).
 	Weight       int        `json:"weight"`
 	Helpful      int        `json:"helpful"`
 	Harmful      int        `json:"harmful"`
+	WeakHelpful  int        `gorm:"default:0" json:"weak_helpful"`
+	WeakHarmful  int        `gorm:"default:0" json:"weak_harmful"`
 	Uses         int        `json:"uses"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
 	ClusterID    uint       `gorm:"index" json:"cluster_id"`
@@ -87,8 +91,26 @@ type KnowledgeNode struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// Utility: rata-rata posterior Beta(helpful+1, harmful+1) — 0.5 untuk node yang belum teruji.
+// KnowledgeWeakWeight: bobot satu bukti lemah terhadap satu bukti kuat di Utility. Satu nilai todo dibagikan ke
+// belasan sampai puluhan node yang disisipkan, padahal yang benar-benar diikuti agent biasanya hanya beberapa;
+// 0.25 berarti empat hasil todo yang "ikut dinikmati" setara satu vonis per node. Cukup untuk membedakan node
+// yang selalu hadir di pekerjaan bagus dari yang selalu hadir di pekerjaan buruk, tetapi tidak bisa menyusul
+// node yang punya vonis eksplisit.
+const KnowledgeWeakWeight = 0.25
+
+// Utility: rata-rata posterior Beta(helpful+1+w·weak_helpful, harmful+1+w·weak_harmful), w = KnowledgeWeakWeight —
+// 0.5 untuk node yang belum teruji. Tanpa bukti lemah nilainya sama dengan StrongUtility.
 func (n KnowledgeNode) Utility() float64 {
+	if n.WeakHelpful == 0 && n.WeakHarmful == 0 {
+		return n.StrongUtility()
+	}
+	a := float64(n.Helpful+1) + KnowledgeWeakWeight*float64(n.WeakHelpful)
+	b := float64(n.Harmful+1) + KnowledgeWeakWeight*float64(n.WeakHarmful)
+	return a / (a + b)
+}
+
+// StrongUtility: rata-rata posterior Beta(helpful+1, harmful+1) atas bukti kuat saja — dasar promosi & pensiun.
+func (n KnowledgeNode) StrongUtility() float64 {
 	return float64(n.Helpful+1) / float64(n.Helpful+n.Harmful+2)
 }
 
@@ -118,14 +140,35 @@ const (
 	KnowledgeOutcomeNeutral = "neutral"
 )
 
+// Asal bukti sebuah pemakaian (KnowledgeUse.Evidence). Verdict & cited = bukti kuat; outcome = bukti lemah.
+const (
+	KnowledgeEvidenceVerdict = "verdict" // vonis per node dari penilai (Judge)
+	KnowledgeEvidenceCited   = "cited"   // dikutip agent di baris PENGETAHUAN catatan penyelesaian todo yang lulus
+	KnowledgeEvidenceOutcome = "outcome" // hanya ikut hasil pekerjaan tempat node itu disisipkan
+)
+
 // KnowledgeUse: node yang disisipkan ke prompt sebuah pekerjaan; diberi nilai saat hasil kerjanya diketahui.
 type KnowledgeUse struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	NodeID     uint      `gorm:"index" json:"node_id"`
-	Context    string    `gorm:"size:191;index" json:"context"` // todo:12, audit:3:path/berkas.go, plan:4
-	EmployeeID *uint     `json:"employee_id,omitempty"`
-	Outcome    string    `gorm:"size:16;index" json:"outcome,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	NodeID     uint   `gorm:"index" json:"node_id"`
+	Context    string `gorm:"size:191;index" json:"context"` // todo:12, audit:3:path/berkas.go, plan:4
+	EmployeeID *uint  `json:"employee_id,omitempty"`
+	Outcome    string `gorm:"size:16;index" json:"outcome,omitempty"`
+	// Evidence: asal bukti outcome (KnowledgeEvidence*); kosong = belum dinilai, ditutup netral, atau catatan lama.
+	Evidence  string    `gorm:"size:16;index;default:''" json:"evidence,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// KnowledgeVerdict: vonis terakhir penilai atas satu node di satu konteks. Satu pekerjaan memberi paling banyak
+// satu bukti kuat per node walaupun dinilai berkali-kali (putaran QA gate, review berkala); vonis yang berubah
+// memindahkan buktinya, bukan menambah. Tidak ikut dibuang bersama catatan pemakaian.
+type KnowledgeVerdict struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Context   string    `gorm:"size:191;uniqueIndex:idx_knowledge_verdict_ctx_node" json:"context"`
+	NodeID    uint      `gorm:"uniqueIndex:idx_knowledge_verdict_ctx_node" json:"node_id"`
+	Helpful   bool      `json:"helpful"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Status celah pengetahuan.

@@ -156,6 +156,7 @@ func migrateDatabaseSchema(db *gorm.DB) error {
 		&models.KnowledgeLink{},
 		&models.KnowledgeCluster{},
 		&models.KnowledgeUse{},
+		&models.KnowledgeVerdict{},
 		&models.KnowledgeGap{},
 		&models.TrafficSource{},
 		&models.TrafficRouteStat{},

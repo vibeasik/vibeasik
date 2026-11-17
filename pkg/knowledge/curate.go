@@ -18,8 +18,9 @@ import (
 // Kurator (peran "Curator" di ACE): berjalan berkala di `vibeasik serve` dan bisa dipicu manual.
 //  1. sinkron sumber (guidelines, pegawai, checklist audit)
 //  2. lebur node asli yang hampir sama (kosinus ≥ 0.85)
-//  3. promosikan pengetahuan pribadi yang terbukti berguna (✓≥3, utilitas ≥0.75) ke pustaka bersama
-//  4. pangkas node asli yang terbukti merugikan; patokan berkas yang sering keliru ditandai perlu ditinjau
+//  3. promosikan pengetahuan pribadi yang terbukti berguna (✓ kuat ≥3, utilitas bukti kuat ≥0.75) ke pustaka bersama
+//  4. pangkas node asli yang terbukti merugikan (bukti kuat saja); patokan berkas yang sering keliru ditandai perlu
+//     ditinjau. Bukti lemah (node hanya ikut hasil pekerjaan) hanya menggeser peringkat, tidak mempromosikan/memensiunkan.
 //  5. hitung ulang tautan (3 tetangga terdekat) & klaster konsep
 //  6. tutup pemakaian yang tidak akan pernah dinilai sebagai netral (SettleStale)
 //  7. buang catatan pemakaian > 30 hari
@@ -136,10 +137,13 @@ func mergeDuplicates(db *gorm.DB) int {
 			keep.Content = synthesize(keep.Content, drop.Content)
 			keep.Helpful += drop.Helpful
 			keep.Harmful += drop.Harmful
+			keep.WeakHelpful += drop.WeakHelpful
+			keep.WeakHarmful += drop.WeakHarmful
 			keep.Uses += drop.Uses
 			keep.Weight = clamp(max(keep.Weight, drop.Weight)+3, 1, 99)
 			db.Model(&models.KnowledgeNode{}).Where("id = ?", keep.ID).Updates(map[string]interface{}{
 				"content": keep.Content, "helpful": keep.Helpful, "harmful": keep.Harmful, "uses": keep.Uses, "weight": keep.Weight,
+				"weak_helpful": keep.WeakHelpful, "weak_harmful": keep.WeakHarmful,
 			})
 			db.Model(&models.KnowledgeNode{}).Where("id = ?", drop.ID).Updates(map[string]interface{}{
 				"status": models.KnowledgeNodeMerged, "merged_into_id": keep.ID, "status_reason": "Dilebur ke K" + itoa(keep.ID) + " (" + clip(keep.Title, 80) + ")",
@@ -159,13 +163,44 @@ func mergeDuplicates(db *gorm.DB) int {
 	return merged
 }
 
+// Ambang kurasi atas bukti kuat (KnowledgeNode.Helpful/Harmful & StrongUtility).
+const (
+	promoteMinHelpful = 3
+	promoteMinUtility = 0.75
+	pruneMinHarmful   = 3
+	retireMaxUtility  = 0.3 // node asli dipensiunkan di bawah ini
+	flagMaxUtility    = 0.4 // patokan berkas ditandai perlu ditinjau di bawah ini
+	recoverMinUtility = 0.5 // tanda perlu ditinjau dilepas lagi mulai dari sini
+)
+
+// promotable: pengetahuan pribadi yang berulang kali terbukti membantu menurut bukti kuat.
+func promotable(n models.KnowledgeNode) bool {
+	return n.OwnerEmployeeID != nil && n.Helpful >= promoteMinHelpful && n.StrongUtility() >= promoteMinUtility
+}
+
+// pruneAction: "retire" (node asli dipensiunkan), "flag" (patokan berkas perlu ditinjau), atau "" — menurut bukti
+// kuat saja.
+func pruneAction(n models.KnowledgeNode) string {
+	if n.Harmful < pruneMinHarmful {
+		return ""
+	}
+	u := n.StrongUtility()
+	switch {
+	case native(n.Key) && u < retireMaxUtility:
+		return "retire"
+	case (n.Source == models.KnowledgeSrcGuideline || n.Source == models.KnowledgeSrcChecklist) && u < flagMaxUtility:
+		return "flag"
+	}
+	return ""
+}
+
 // promote: pengetahuan pribadi yang berulang kali terbukti membantu dibagikan ke pustaka bersama kantor.
 func promote(db *gorm.DB) int {
 	var rows []models.KnowledgeNode
-	db.Where("status = ? AND owner_employee_id IS NOT NULL AND helpful >= ?", models.KnowledgeNodeActive, 3).Find(&rows)
+	db.Where("status = ? AND owner_employee_id IS NOT NULL AND helpful >= ?", models.KnowledgeNodeActive, promoteMinHelpful).Find(&rows)
 	n := 0
 	for _, r := range rows {
-		if r.Utility() < 0.75 {
+		if !promotable(r) {
 			continue
 		}
 		_, created, err := upsertKey(db, Note{
@@ -183,23 +218,24 @@ func promote(db *gorm.DB) int {
 // (berkasnya tetap sumber kebenaran) — tanda dilepas lagi bila utilitasnya pulih.
 func prune(db *gorm.DB) (retired, flagged int) {
 	var bad []models.KnowledgeNode
-	db.Where("status = ? AND harmful >= ?", models.KnowledgeNodeActive, 3).Find(&bad)
+	db.Where("status = ? AND harmful >= ?", models.KnowledgeNodeActive, pruneMinHarmful).Find(&bad)
 	for _, n := range bad {
-		u := n.Utility()
-		switch {
-		case native(n.Key) && u < 0.3:
+		switch pruneAction(n) {
+		case "retire":
 			db.Model(&n).Updates(map[string]interface{}{"status": models.KnowledgeNodeRetired,
 				"status_reason": "Terbukti lebih sering merugikan (✓" + itoa(uint(n.Helpful)) + " ✗" + itoa(uint(n.Harmful)) + ")"})
 			retired++
-		case (n.Source == models.KnowledgeSrcGuideline || n.Source == models.KnowledgeSrcChecklist) && u < 0.4 && !n.NeedsReview:
-			db.Model(&n).UpdateColumn("needs_review", true)
-			flagged++
+		case "flag":
+			if !n.NeedsReview {
+				db.Model(&n).UpdateColumn("needs_review", true)
+				flagged++
+			}
 		}
 	}
 	var recovered []models.KnowledgeNode
 	db.Where("status = ? AND needs_review = ?", models.KnowledgeNodeActive, true).Find(&recovered)
 	for _, n := range recovered {
-		if n.Utility() >= 0.5 {
+		if n.StrongUtility() >= recoverMinUtility {
 			db.Model(&n).UpdateColumn("needs_review", false)
 		}
 	}
@@ -246,7 +282,9 @@ func relink(db *gorm.DB, ix *index) int {
 // recluster: klaster konsep dengan leader clustering satu lintasan pada vektor TF-IDF (node berbobot didahulukan
 // sebagai pusat). Klaster berukuran ≥2 disimpan beserta label kata pusatnya; node tunggal tidak berklaster.
 func recluster(db *gorm.DB, ix *index) int {
-	meta := loadActive(db, func(q *gorm.DB) *gorm.DB { return q.Select("id", "weight", "helpful", "harmful", "uses", "domain") })
+	meta := loadActive(db, func(q *gorm.DB) *gorm.DB {
+		return q.Select("id", "weight", "helpful", "harmful", "weak_helpful", "weak_harmful", "uses", "domain")
+	})
 	order := make([]*entry, 0, len(ix.entries))
 	for _, e := range ix.entries {
 		if _, ok := meta[e.id]; ok {
