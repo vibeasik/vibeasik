@@ -23,6 +23,8 @@ var (
 	evalNow     string
 	evalWeights string
 	evalDomains int
+	evalSplit   string
+	evalRank    string
 )
 
 var knowledgeEvalCmd = &cobra.Command{
@@ -36,6 +38,13 @@ Angka hanya bermakna sebagai pembanding antar varian peringkat: label hanya ada 
 ditampilkan peringkat lama. Database dibuka tanpa migrasi dan dibaca dalam transaksi read-only.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opt := knowledge.EvalOptions{K: evalK, Limit: evalLimit}
+		switch evalSplit {
+		case "", "semua":
+		case knowledge.EvalSplitTrain, knowledge.EvalSplitTest:
+			opt.Split = evalSplit
+		default:
+			return fmt.Errorf("--split harus %s, %s, atau semua", knowledge.EvalSplitTrain, knowledge.EvalSplitTest)
+		}
 		if evalNow != "" {
 			t, err := parseEvalTime(evalNow)
 			if err != nil {
@@ -49,6 +58,14 @@ ditampilkan peringkat lama. Database dibuka tanpa migrasi dan dibaca dalam trans
 				return err
 			}
 			opt.Weights = w
+		}
+		if evalRank != "" {
+			if opt.Weights == (knowledge.RankWeights{}) {
+				opt.Weights = knowledge.DefaultRankWeights
+			}
+			if err := applyRankOptions(&opt.Weights, evalRank); err != nil {
+				return err
+			}
 		}
 		db, err := database.Open(dbPath)
 		if err != nil {
@@ -108,16 +125,63 @@ func parseRankWeights(s string) (knowledge.RankWeights, error) {
 	return w, nil
 }
 
+// applyRankOptions menerapkan "kunci=nilai,…" (nama JSON RankWeights, mis. lexical=bm25,domain_bonus=0.2)
+// pada bobot. Kunci yang tidak dikenal ditolak.
+func applyRankOptions(w *knowledge.RankWeights, s string) error {
+	for _, kv := range strings.Split(s, ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(kv), "=")
+		if !ok {
+			return fmt.Errorf("--rank: %q bukan kunci=nilai", kv)
+		}
+		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		if k == "lexical" {
+			switch v {
+			case knowledge.LexicalTFIDF, knowledge.LexicalBM25, knowledge.LexicalRRF:
+				w.Lexical = v
+				continue
+			}
+			return fmt.Errorf("--rank: lexical %q tidak dikenal (tfidf, bm25, rrf)", v)
+		}
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return fmt.Errorf("--rank: %s=%q bukan angka", k, v)
+		}
+		ints := map[string]*int{"feedback": &w.Feedback, "feedback_terms": &w.FeedbackTerms, "max_linked": &w.MaxLinked, "max_hits": &w.MaxHits}
+		floats := map[string]*float64{
+			"relevance": &w.Relevance, "utility": &w.Utility, "importance": &w.Importance, "recency": &w.Recency,
+			"recency_days": &w.RecencyDays, "domain_bonus": &w.DomainBonus, "min_relevance": &w.MinRelevance,
+			"feedback_weight": &w.FeedbackWeight, "tail_ratio": &w.TailRatio, "min_score": &w.MinScore,
+		}
+		switch {
+		case ints[k] != nil:
+			*ints[k] = int(f)
+		case floats[k] != nil:
+			*floats[k] = f
+		default:
+			return fmt.Errorf("--rank: kunci %q tidak dikenal", k)
+		}
+	}
+	return nil
+}
+
 func printEvalReport(out io.Writer, rep *knowledge.EvalReport, domains int) {
 	w := rep.Weights
-	fmt.Fprintf(out, "Evaluasi temu-kembali (k=%d, daftar %d, acuan %s)\n", rep.K, rep.Limit, rep.Now.Format(time.RFC3339))
-	fmt.Fprintf(out, "Node aktif %d · todo diperingkat %d · bobot relevansi %.2f utilitas %.2f kepentingan %.2f kebaruan %.2f\n\n",
+	split := rep.Split
+	if split == "" {
+		split = "semua"
+	}
+	fmt.Fprintf(out, "Evaluasi temu-kembali (k=%d, daftar %d, acuan %s, bagian %s)\n", rep.K, rep.Limit, rep.Now.Format(time.RFC3339), split)
+	fmt.Fprintf(out, "Node aktif %d · todo diperingkat %d · bobot relevansi %.2f utilitas %.2f kepentingan %.2f kebaruan %.2f\n",
 		rep.Nodes, rep.Todos, w.Relevance, w.Utility, w.Importance, w.Recency)
+	if b, err := json.Marshal(w); err == nil {
+		fmt.Fprintf(out, "Peringkat %s\n\n", b)
+	}
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', tabwriter.AlignRight)
-	fmt.Fprintf(tw, "tingkat\tkueri\tlabel\trecall@%d\tnDCG@%d\tMRR@%d\tbocor\ttak aktif\t\n", rep.K, rep.K, rep.K)
+	fmt.Fprintf(tw, "tingkat\tkueri\tlabel\trecall@%d\tnDCG@%d\tMRR@%d\tnDCG@%d terkond.\tbelum dinilai\trecall daftar\tnode/kueri\ttautan\tbocor\ttak aktif\t\n", rep.K, rep.K, rep.K, rep.K)
 	for _, t := range rep.Tiers {
 		m := t.Total
-		fmt.Fprintf(tw, "%s\t%d\t%d\t%.4f\t%.4f\t%.4f\t%d\t%d\t\n", t.Name, m.Queries, m.Labels, m.Recall, m.NDCG, m.MRR, t.DroppedLeak, t.DroppedInactive)
+		fmt.Fprintf(tw, "%s\t%d\t%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.2f\t%.2f\t%d\t%d\t\n", t.Name, m.Queries, m.Labels, m.Recall, m.NDCG, m.MRR,
+			m.CondNDCG, m.Unjudged, m.RecallList, m.Delivered, m.Linked, t.DroppedLeak, t.DroppedInactive)
 	}
 	tw.Flush()
 	if domains <= 0 {
@@ -145,5 +209,7 @@ func init() {
 	f.StringVar(&evalNow, "now", "", "Acuan waktu & batas data, 2006-01-02 atau RFC3339 (bawaan awal hari ini)")
 	f.StringVar(&evalWeights, "weights", "", "Varian bobot relevansi,utilitas,kepentingan,kebaruan (bawaan bobot produksi)")
 	f.IntVar(&evalDomains, "domains", 10, "Jumlah domain yang ditampilkan per tingkat (0 = tanpa rincian)")
+	f.StringVar(&evalSplit, "split", "", "Bagian todo: latih (±70 %), uji (±30 %), atau semua (bawaan)")
+	f.StringVar(&evalRank, "rank", "", "Varian peringkat kunci=nilai,… mis. lexical=bm25,domain_bonus=0.3,tail_ratio=0.8")
 	knowledgeCmd.AddCommand(knowledgeEvalCmd)
 }

@@ -52,3 +52,19 @@ func TestPrintEvalReport(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyRankOptions(t *testing.T) {
+	w := knowledge.DefaultRankWeights
+	if err := applyRankOptions(&w, "lexical=bm25, domain_bonus=0.3,feedback=3,tail_ratio=0.8,max_hits=10"); err != nil {
+		t.Fatal(err)
+	}
+	if w.Lexical != knowledge.LexicalBM25 || w.DomainBonus != 0.3 || w.Feedback != 3 || w.TailRatio != 0.8 || w.MaxHits != 10 ||
+		w.Relevance != knowledge.DefaultRankWeights.Relevance {
+		t.Fatalf("bobot = %+v", w)
+	}
+	for _, bad := range []string{"lexical=dense", "domain_bonus", "nope=1", "feedback=x"} {
+		if err := applyRankOptions(&w, bad); err == nil {
+			t.Errorf("%q harus ditolak", bad)
+		}
+	}
+}
