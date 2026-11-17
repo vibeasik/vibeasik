@@ -25,6 +25,7 @@ var (
 	evalDomains int
 	evalSplit   string
 	evalRank    string
+	evalOwn     bool
 )
 
 var knowledgeEvalCmd = &cobra.Command{
@@ -34,10 +35,13 @@ var knowledgeEvalCmd = &cobra.Command{
 node yang disebut di baris "PENGETAHUAN: K<id>" catatan penyelesaian todo yang lulus QA (tingkat kuat) dan
 node yang pemakaiannya bernilai helpful (tingkat lemah). Node yang dibuat setelah todo dibuat tidak dihitung.
 
+Saat memeringkat untuk sebuah todo, bukti ✓/✗ dan waktu pakai yang berasal dari todo itu sendiri dikeluarkan
+dari penghitung node (--own-evidence = cara ukur lama, penghitung apa adanya).
+
 Angka hanya bermakna sebagai pembanding antar varian peringkat: label hanya ada untuk node yang pernah
 ditampilkan peringkat lama. Database dibuka tanpa migrasi dan dibaca dalam transaksi read-only.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		opt := knowledge.EvalOptions{K: evalK, Limit: evalLimit}
+		opt := knowledge.EvalOptions{K: evalK, Limit: evalLimit, KeepOwnEvidence: evalOwn}
 		switch evalSplit {
 		case "", "semua":
 		case knowledge.EvalSplitTrain, knowledge.EvalSplitTest:
@@ -170,7 +174,11 @@ func printEvalReport(out io.Writer, rep *knowledge.EvalReport, domains int) {
 	if split == "" {
 		split = "semua"
 	}
-	fmt.Fprintf(out, "Evaluasi temu-kembali (k=%d, daftar %d, acuan %s, bagian %s)\n", rep.K, rep.Limit, rep.Now.Format(time.RFC3339), split)
+	own := "tanpa bukti todo yang diuji"
+	if !rep.Holdout {
+		own = "dengan bukti todo yang diuji"
+	}
+	fmt.Fprintf(out, "Evaluasi temu-kembali (k=%d, daftar %d, acuan %s, bagian %s, %s)\n", rep.K, rep.Limit, rep.Now.Format(time.RFC3339), split, own)
 	fmt.Fprintf(out, "Node aktif %d · todo diperingkat %d · bobot relevansi %.2f utilitas %.2f kepentingan %.2f kebaruan %.2f\n",
 		rep.Nodes, rep.Todos, w.Relevance, w.Utility, w.Importance, w.Recency)
 	if b, err := json.Marshal(w); err == nil {
@@ -211,5 +219,6 @@ func init() {
 	f.IntVar(&evalDomains, "domains", 10, "Jumlah domain yang ditampilkan per tingkat (0 = tanpa rincian)")
 	f.StringVar(&evalSplit, "split", "", "Bagian todo: latih (±70 %), uji (±30 %), atau semua (bawaan)")
 	f.StringVar(&evalRank, "rank", "", "Varian peringkat kunci=nilai,… mis. lexical=bm25,domain_bonus=0.3,tail_ratio=0.8")
+	f.BoolVar(&evalOwn, "own-evidence", false, "Pakai penghitung node apa adanya, termasuk bukti dari todo yang sedang diuji (cara ukur lama)")
 	knowledgeCmd.AddCommand(knowledgeEvalCmd)
 }

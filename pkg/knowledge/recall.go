@@ -124,6 +124,12 @@ func Recall(db *gorm.DB, q Query) Result {
 // nil) menyingkirkan node dari kandidat dan tetangga bertaut — dipakai evaluasi untuk membuang node yang belum ada
 // saat pekerjaan dimulai. q.Limit harus sudah dinormalkan pemanggil.
 func rank(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude func(*entry) bool) Result {
+	return rankWith(db, ix, q, w, now, exclude, nil)
+}
+
+// rankWith = rank dengan adjust (boleh nil) yang mengubah salinan node kandidat sebelum diberi skor — dipakai
+// evaluasi untuk mengeluarkan bukti & pemakaian dari pekerjaan yang sedang diuji (lihat holdout).
+func rankWith(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude func(*entry) bool, adjust func(*models.KnowledgeNode)) Result {
 	domains := uniq(append(canonicalAll(q.Domains), DetectDomains(q.Text)...))
 	res := Result{Domains: domains}
 	eco := map[string]bool{}
@@ -169,12 +175,12 @@ func rank(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude
 		maxRel = math.Max(maxRel, rel[id])
 	}
 
-	hits := scoreNodes(db, ids, func(id uint) float64 { return rel[id] / maxRel }, w, now)
+	hits := scoreNodes(db, ids, func(id uint) float64 { return rel[id] / maxRel }, w, now, adjust)
 	for i := range hits {
 		hits[i].Relevance = round3(rel[hits[i].ID])
 	}
 	sortHits(hits)
-	hits = append(hits, expand(db, ix, hits, q.Limit, allowed, w, now)...)
+	hits = append(hits, expand(db, ix, hits, q.Limit, allowed, w, now, adjust)...)
 	sortHits(hits)
 	limit := q.Limit
 	if w.MaxHits > 0 && w.MaxHits < limit {
@@ -219,8 +225,8 @@ func trimTail(h []Hit, w RankWeights) []Hit {
 	return out
 }
 
-// scoreNodes memuat node kandidat dan menghitung skornya (relN = relevansi ternormalisasi 0–1).
-func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64, w RankWeights, now time.Time) []Hit {
+// scoreNodes memuat node kandidat dan menghitung skornya (relN = relevansi ternormalisasi 0–1; adjust boleh nil).
+func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64, w RankWeights, now time.Time, adjust func(*models.KnowledgeNode)) []Hit {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -228,6 +234,9 @@ func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64, w RankWeights,
 	db.Where("id IN ? AND status = ?", ids, models.KnowledgeNodeActive).Find(&nodes)
 	out := make([]Hit, 0, len(nodes))
 	for _, n := range nodes {
+		if adjust != nil {
+			adjust(&n)
+		}
 		u := n.Utility()
 		if models.KnowledgeAuthoritative(n.Source) {
 			u = 1 // sumber berkedudukan tinggi (Galeri Desain): tidak digeser bukti dari hasil kerja pegawai
@@ -246,7 +255,7 @@ func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64, w RankWeights,
 }
 
 // expand: tetangga bertaut dari node teratas ikut dinilai (aktivasi menyebar satu langkah, gaya HippoRAG/A-MEM).
-func expand(db *gorm.DB, ix *index, hits []Hit, limit int, allowed func(*entry) bool, w RankWeights, now time.Time) []Hit {
+func expand(db *gorm.DB, ix *index, hits []Hit, limit int, allowed func(*entry) bool, w RankWeights, now time.Time, adjust func(*models.KnowledgeNode)) []Hit {
 	if len(hits) == 0 {
 		return nil
 	}
@@ -286,7 +295,7 @@ func expand(db *gorm.DB, ix *index, hits []Hit, limit int, allowed func(*entry) 
 	for id := range via {
 		ids = append(ids, id)
 	}
-	out := scoreNodes(db, ids, func(uint) float64 { return 0 }, w, now)
+	out := scoreNodes(db, ids, func(uint) float64 { return 0 }, w, now, adjust)
 	for i := range out {
 		// Skor tetangga = 0.7 × skor asal × kekuatan tautan + 0.3 × skornya sendiri tanpa relevansi langsung.
 		out[i].Score = round3(via[out[i].ID]*0.7 + out[i].Score*0.3)

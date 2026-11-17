@@ -22,7 +22,9 @@ import (
 //   - lemah: node yang pemakaiannya di konteks todo:<id> bernilai helpful (Reward/Judge).
 //
 // Evaluasi memakai fungsi peringkat yang sama dengan Recall (rank) tanpa efek samping: tidak mencatat pemakaian,
-// celah, atau apa pun. Node yang dibuat setelah todo dibuat tidak dihitung sebagai kandidat maupun label.
+// celah, atau apa pun. Node yang dibuat setelah todo dibuat tidak dihitung sebagai kandidat maupun label. Bawaannya
+// bukti & waktu pakai yang berasal dari todo yang sedang diuji dikeluarkan dari penghitung node (eval_holdout.go);
+// EvalOptions.KeepOwnEvidence mematikannya agar angka cara ukur lama bisa diulang.
 //
 // Label hanya ada untuk node yang pernah ditampilkan peringkat lama, jadi peringkat baru yang mengangkat node yang
 // belum pernah dinilai tampak lebih buruk walau mungkin benar. Untuk itu dilaporkan juga nDCG terkondensasi
@@ -47,6 +49,9 @@ type EvalOptions struct {
 	Split string
 	// PerQuery: sertakan metrik per todo (EvalTier.Queries) untuk perbandingan berpasangan antar varian.
 	PerQuery bool
+	// KeepOwnEvidence: pakai penghitung & waktu pakai node apa adanya, termasuk sumbangan todo yang sedang
+	// diuji (cara ukur lama). Kosong = sumbangan itu dikeluarkan.
+	KeepOwnEvidence bool
 }
 
 // Bagian set uji.
@@ -120,9 +125,11 @@ type EvalReport struct {
 	Now     time.Time   `json:"now"`
 	Weights RankWeights `json:"weights"`
 	Split   string      `json:"split,omitempty"`
-	Nodes   int         `json:"nodes"` // node aktif di indeks
-	Todos   int         `json:"todos"` // todo yang diperingkat (punya label di salah satu tingkat)
-	Tiers   []EvalTier  `json:"tiers"`
+	// Holdout: bukti & waktu pakai dari todo yang sedang diuji dikeluarkan (kebalikan KeepOwnEvidence).
+	Holdout bool       `json:"holdout"`
+	Nodes   int        `json:"nodes"` // node aktif di indeks
+	Todos   int        `json:"todos"` // todo yang diperingkat (punya label di salah satu tingkat)
+	Tiers   []EvalTier `json:"tiers"`
 }
 
 // Nama tingkat label.
@@ -309,8 +316,16 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 		weak[uint(id)] = append(weak[uint(id)], u.NodeID)
 	}
 
+	var hold *holdout
+	if !opt.KeepOwnEvidence {
+		var err error
+		if hold, err = loadHoldout(db); err != nil {
+			return nil, err
+		}
+	}
+
 	ix := current(db)
-	rep := &EvalReport{K: opt.K, Now: opt.Now, Weights: opt.Weights, Split: opt.Split, Nodes: ix.n}
+	rep := &EvalReport{K: opt.K, Now: opt.Now, Weights: opt.Weights, Split: opt.Split, Holdout: hold != nil, Nodes: ix.n}
 	type acc struct {
 		tier            EvalTier
 		total           EvalMetrics
@@ -364,10 +379,10 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 		}
 		q.Limit = limit
 		rep.Limit = max(rep.Limit, limit)
-		res := rank(db, ix, q, opt.Weights, opt.Now, func(e *entry) bool {
+		res := rankWith(db, ix, q, opt.Weights, opt.Now, func(e *entry) bool {
 			c, ok := created[e.id]
 			return !ok || c.After(cutoff)
-		})
+		}, hold.adjustFor(t.ID))
 		ranked := make([]uint, len(res.Hits))
 		linked := 0
 		for i, h := range res.Hits {

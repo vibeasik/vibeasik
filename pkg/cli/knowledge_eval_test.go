@@ -38,7 +38,7 @@ func TestParseEvalTime(t *testing.T) {
 }
 
 func TestPrintEvalReport(t *testing.T) {
-	rep := &knowledge.EvalReport{K: 10, Limit: 15, Weights: knowledge.DefaultRankWeights, Nodes: 3, Todos: 2, Tiers: []knowledge.EvalTier{{
+	rep := &knowledge.EvalReport{K: 10, Limit: 15, Weights: knowledge.DefaultRankWeights, Holdout: true, Nodes: 3, Todos: 2, Tiers: []knowledge.EvalTier{{
 		Name:     knowledge.EvalTierStrong,
 		Total:    knowledge.EvalMetrics{Queries: 2, Labels: 3, Recall: 0.5, NDCG: 0.25, MRR: 1},
 		ByDomain: []knowledge.DomainMetrics{{Domain: "go", EvalMetrics: knowledge.EvalMetrics{Queries: 2, Labels: 3, Recall: 0.5}}},
@@ -46,7 +46,7 @@ func TestPrintEvalReport(t *testing.T) {
 	var b bytes.Buffer
 	printEvalReport(&b, rep, 5)
 	out := b.String()
-	for _, want := range []string{"recall@10", "kuat", "0.5000", "0.2500", "Per domain", " go "} {
+	for _, want := range []string{"recall@10", "tanpa bukti todo yang diuji", "kuat", "0.5000", "0.2500", "Per domain", " go "} {
 		if !strings.Contains(out, want) {
 			t.Errorf("keluaran tidak memuat %q:\n%s", want, out)
 		}
