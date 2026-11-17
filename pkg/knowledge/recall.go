@@ -43,17 +43,34 @@ type Result struct {
 }
 
 const (
-	minRelevance  = 0.08
-	domainBonus   = 0.12 // node di domain yang diminta tetap terangkat walau katanya tidak sama persis
 	candidatePool = 80
-	recencyDays   = 45.0
 	minGapCorpus  = 20 // celah baru dicatat setelah pusat terisi (bukan saat sinkron awal belum jalan)
 )
+
+// RankWeights adalah parameter rumus skor temu-kembali. Recall selalu memakai DefaultRankWeights; varian lain
+// hanya dipakai evaluasi (Evaluate) untuk membandingkan peringkat tanpa mengubah perilaku produksi.
+type RankWeights struct {
+	Relevance    float64 `json:"relevance"`     // bobot relevansi ternormalisasi (kosinus TF-IDF + bonus domain)
+	Utility      float64 `json:"utility"`       // bobot utilitas Beta helpful/harmful
+	Importance   float64 `json:"importance"`    // bobot kepentingan (Weight/100)
+	Recency      float64 `json:"recency"`       // bobot kebaruan
+	RecencyDays  float64 `json:"recency_days"`  // skala peluruhan kebaruan (hari)
+	DomainBonus  float64 `json:"domain_bonus"`  // node di domain yang diminta tetap terangkat walau katanya tidak sama persis
+	MinRelevance float64 `json:"min_relevance"` // relevansi mentah minimal agar node menjadi kandidat
+}
+
+// DefaultRankWeights: bobot yang dipakai Recall.
+var DefaultRankWeights = RankWeights{
+	Relevance: 0.55, Utility: 0.20, Importance: 0.15, Recency: 0.10,
+	RecencyDays: 45, DomainBonus: 0.12, MinRelevance: 0.08,
+}
 
 // Recall memilih node paling berguna untuk sebuah pekerjaan:
 //
 //	skor = 0.55·relevansi (kosinus TF-IDF + bonus domain, dinormalisasi) + 0.20·utilitas (Beta helpful/harmful)
 //	     + 0.15·kepentingan (bobot) + 0.10·kebaruan (peluruhan 45 hari sejak terakhir dipakai)
+//
+// (angka-angka itu = DefaultRankWeights).
 //
 // Node ekosistem lain disaring (patokan Flutter tidak masuk todo Go), node merugikan (✗≥3, utilitas <0.25)
 // dilewati, tetangga bertaut dari node teratas ikut dipertimbangkan, dan tiap klaster dibatasi agar hasil beragam.
@@ -65,65 +82,12 @@ func Recall(db *gorm.DB, q Query) Result {
 		q.Limit = 10
 	}
 	ix := current(db)
-	domains := uniq(append(lowerAll(q.Domains), DetectDomains(q.Text)...))
-	res := Result{Domains: domains}
-	eco := map[string]bool{}
-	for _, d := range domains {
-		if IsEcosystem(d) {
-			eco[d] = true
-		}
-	}
-	kinds := setOf(q.Kinds)
-	skip := setOf(q.SkipSources)
-	allowed := func(e *entry) bool {
-		if e.owner != 0 && e.owner != q.EmployeeID {
-			return false
-		}
-		if (len(kinds) > 0 && !kinds[e.kind]) || skip[e.source] {
-			return false
-		}
-		return len(eco) == 0 || e.domain == "" || !IsEcosystem(e.domain) || eco[e.domain]
-	}
-
-	rel := map[uint]float64{}
-	qv := ix.queryVector(q.Text, "", strings.Join(domains, " "), nil)
-	for _, nb := range ix.nearest(qv, 0, 0.0001, func(e *entry) bool { return !allowed(e) }) {
-		rel[nb.e.id] = nb.sim
-	}
-	want := setOf(domains)
-	for _, e := range ix.entries {
-		if want[e.domain] && allowed(e) {
-			rel[e.id] += domainBonus
-		}
-	}
-	ids := make([]uint, 0, len(rel))
-	for id, r := range rel {
-		if r >= minRelevance {
-			ids = append(ids, id)
-		}
-	}
-	sort.Slice(ids, func(i, j int) bool { return rel[ids[i]] > rel[ids[j]] || rel[ids[i]] == rel[ids[j]] && ids[i] < ids[j] })
-	if len(ids) > candidatePool {
-		ids = ids[:candidatePool]
-	}
-	maxRel := 0.0
-	for _, id := range ids {
-		maxRel = math.Max(maxRel, rel[id])
-	}
-
-	hits := scoreNodes(db, ids, func(id uint) float64 { return rel[id] / maxRel })
-	for i := range hits {
-		hits[i].Relevance = round3(rel[hits[i].ID])
-	}
-	sortHits(hits)
-	hits = append(hits, expand(db, ix, hits, q.Limit, allowed)...)
-	sortHits(hits)
-	res.Hits = diversify(hits, q.Limit)
+	res := rank(db, ix, q, DefaultRankWeights, time.Now(), nil)
 
 	if q.Context != "" {
 		if ix.n >= minGapCorpus {
-			for d := range eco {
-				if ix.domainN[d] == 0 {
+			for _, d := range res.Domains {
+				if IsEcosystem(d) && ix.domainN[d] == 0 {
 					res.Gaps = append(res.Gaps, d)
 					if !q.DryRun {
 						recordAutoGap(db, d, q.Text)
@@ -144,14 +108,77 @@ func Recall(db *gorm.DB, q Query) Result {
 	return res
 }
 
+// rank adalah inti peringkat Recall tanpa efek samping (tidak mencatat pemakaian maupun celah). exclude (boleh
+// nil) menyingkirkan node dari kandidat dan tetangga bertaut — dipakai evaluasi untuk membuang node yang belum ada
+// saat pekerjaan dimulai. q.Limit harus sudah dinormalkan pemanggil.
+func rank(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude func(*entry) bool) Result {
+	domains := uniq(append(lowerAll(q.Domains), DetectDomains(q.Text)...))
+	res := Result{Domains: domains}
+	eco := map[string]bool{}
+	for _, d := range domains {
+		if IsEcosystem(d) {
+			eco[d] = true
+		}
+	}
+	kinds := setOf(q.Kinds)
+	skip := setOf(q.SkipSources)
+	allowed := func(e *entry) bool {
+		if e.owner != 0 && e.owner != q.EmployeeID {
+			return false
+		}
+		if (len(kinds) > 0 && !kinds[e.kind]) || skip[e.source] {
+			return false
+		}
+		if exclude != nil && exclude(e) {
+			return false
+		}
+		return len(eco) == 0 || e.domain == "" || !IsEcosystem(e.domain) || eco[e.domain]
+	}
+
+	rel := map[uint]float64{}
+	qv := ix.queryVector(q.Text, "", strings.Join(domains, " "), nil)
+	for _, nb := range ix.nearest(qv, 0, 0.0001, func(e *entry) bool { return !allowed(e) }) {
+		rel[nb.e.id] = nb.sim
+	}
+	want := setOf(domains)
+	for _, e := range ix.entries {
+		if want[e.domain] && allowed(e) {
+			rel[e.id] += w.DomainBonus
+		}
+	}
+	ids := make([]uint, 0, len(rel))
+	for id, r := range rel {
+		if r >= w.MinRelevance {
+			ids = append(ids, id)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return rel[ids[i]] > rel[ids[j]] || rel[ids[i]] == rel[ids[j]] && ids[i] < ids[j] })
+	if len(ids) > candidatePool {
+		ids = ids[:candidatePool]
+	}
+	maxRel := 0.0
+	for _, id := range ids {
+		maxRel = math.Max(maxRel, rel[id])
+	}
+
+	hits := scoreNodes(db, ids, func(id uint) float64 { return rel[id] / maxRel }, w, now)
+	for i := range hits {
+		hits[i].Relevance = round3(rel[hits[i].ID])
+	}
+	sortHits(hits)
+	hits = append(hits, expand(db, ix, hits, q.Limit, allowed, w, now)...)
+	sortHits(hits)
+	res.Hits = diversify(hits, q.Limit)
+	return res
+}
+
 // scoreNodes memuat node kandidat dan menghitung skornya (relN = relevansi ternormalisasi 0–1).
-func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64) []Hit {
+func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64, w RankWeights, now time.Time) []Hit {
 	if len(ids) == 0 {
 		return nil
 	}
 	var nodes []models.KnowledgeNode
 	db.Where("id IN ? AND status = ?", ids, models.KnowledgeNodeActive).Find(&nodes)
-	now := time.Now()
 	out := make([]Hit, 0, len(nodes))
 	for _, n := range nodes {
 		u := n.Utility()
@@ -164,15 +191,15 @@ func scoreNodes(db *gorm.DB, ids []uint, relN func(uint) float64) []Hit {
 		if n.LastUsedAt != nil && n.LastUsedAt.After(last) {
 			last = *n.LastUsedAt
 		}
-		recency := math.Exp(-now.Sub(last).Hours() / 24 / recencyDays)
-		score := 0.55*relN(n.ID) + 0.20*u + 0.15*float64(n.Weight)/100 + 0.10*recency
+		recency := math.Exp(-now.Sub(last).Hours() / 24 / w.RecencyDays)
+		score := w.Relevance*relN(n.ID) + w.Utility*u + w.Importance*float64(n.Weight)/100 + w.Recency*recency
 		out = append(out, Hit{KnowledgeNode: n, Score: round3(score), UtilityV: round3(u)})
 	}
 	return out
 }
 
 // expand: tetangga bertaut dari node teratas ikut dinilai (aktivasi menyebar satu langkah, gaya HippoRAG/A-MEM).
-func expand(db *gorm.DB, ix *index, hits []Hit, limit int, allowed func(*entry) bool) []Hit {
+func expand(db *gorm.DB, ix *index, hits []Hit, limit int, allowed func(*entry) bool, w RankWeights, now time.Time) []Hit {
 	if len(hits) == 0 {
 		return nil
 	}
@@ -212,7 +239,7 @@ func expand(db *gorm.DB, ix *index, hits []Hit, limit int, allowed func(*entry) 
 	for id := range via {
 		ids = append(ids, id)
 	}
-	out := scoreNodes(db, ids, func(uint) float64 { return 0 })
+	out := scoreNodes(db, ids, func(uint) float64 { return 0 }, w, now)
 	for i := range out {
 		// Skor tetangga = 0.7 × skor asal × kekuatan tautan + 0.3 × skornya sendiri tanpa relevansi langsung.
 		out[i].Score = round3(via[out[i].ID]*0.7 + out[i].Score*0.3)
