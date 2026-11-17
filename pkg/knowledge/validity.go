@@ -77,6 +77,36 @@ func checkSupersede(old *models.KnowledgeNode, newOwner *uint, newSource string)
 	return nil
 }
 
+// supersedeProposal mengawali status_reason node yang penggantiannya diusulkan tetapi belum diterapkan. Selama
+// awalan ini ada, kurator tidak melepas tanda perlu ditinjau walau bukti node itu baik.
+const supersedeProposal = "Usulan pengganti K"
+
+// AgentMaySupersede: node old boleh langsung digantikan lewat jalur agent (tool MCP) oleh butir milik newOwner
+// (nil = pustaka bersama). Yang boleh hanya node yang memang tulisan agent: catatan agent, hasil belajar celah, atau
+// pengetahuan pribadi pegawai yang sama. Patokan & hasil kurasi (guideline, checklist audit, playbook, promosi,
+// penilaian QA, vonis audit, galeri/teori desain, paket, ajaran manusia) hanya bisa diusulkan untuk diganti —
+// tanpa batas ini satu agent bisa menyembunyikan patokan bersama dari temu-kembali semua pekerja.
+func AgentMaySupersede(old *models.KnowledgeNode, newOwner *uint) bool {
+	switch old.Source {
+	case models.KnowledgeSrcAgent, models.KnowledgeSrcGap:
+		return true
+	}
+	return old.OwnerEmployeeID != nil && newOwner != nil && *old.OwnerEmployeeID == *newOwner
+}
+
+// proposeSupersede: lanjutan Learn dengan Note.ProposeSupersede. Node lama tetap dikirim temu-kembali; ia ditandai
+// perlu ditinjau dengan alasan yang menyebut usulan penggantinya. Penggantian sungguhan lewat Supersede (CLI).
+func proposeSupersede(db *gorm.DB, oldID uint, repl *models.KnowledgeNode) error {
+	reason := supersedeProposal + itoa(repl.ID) + " (" + clip(repl.Title, 80) + "), dicatat agent; " +
+		"menunggu tinjauan — node ini belum disembunyikan"
+	err := db.Model(&models.KnowledgeNode{}).Where("id = ?", oldID).
+		Updates(map[string]interface{}{"needs_review": true, "status_reason": reason}).Error
+	if err != nil {
+		return fmt.Errorf("K%d tersimpan, tetapi usulan penggantian K%d tidak bisa dicatat: %w", repl.ID, oldID, err)
+	}
+	return nil
+}
+
 // Supersede menandai node oldID digantikan node newID. Bila newID sendiri sudah digantikan, penunjuknya diarahkan
 // ke ujung rantai (node aktif terakhir); node lain yang sebelumnya digantikan oldID ikut diarahkan ke ujung itu,
 // sehingga rantai selalu sedalam satu langkah. Rantai melingkar ditolak. Node lama tetap aktif dan isinya tidak

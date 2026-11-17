@@ -31,7 +31,8 @@ func (s *Server) knowledgeToolsList() []Tool {
 			Name: "vibeasik_knowledge_learn",
 			Description: "Adds reusable, project-independent knowledge to the shared office library of the Knowledge Hub (e.g. how a new language/framework builds & tests, a pitfall you just hit). " +
 				"A near-duplicate of an existing node reinforces it instead of duplicating. Do NOT store project-specific facts (paths, table names, features of one app). " +
-				"When the new knowledge replaces an outdated node (e.g. a newer version changed the behaviour), pass supersedes: the old node stays stored but is no longer recalled.",
+				"When the new knowledge replaces an outdated node (e.g. a newer version changed the behaviour), pass supersedes: an outdated agent note or gap-research node stays stored but is no longer recalled; " +
+				"a curated node (guideline, audit checklist, playbook, promoted, QA review, audit verdict, design gallery/theory) keeps being recalled and is flagged for review with your node named as its proposed replacement.",
 			InputSchema: ToolSchema{Type: "object", Properties: map[string]interface{}{
 				"title":       prop("string", "Short topic"),
 				"content":     prop("string", "1-3 sentences of concrete, reusable knowledge"),
@@ -86,6 +87,13 @@ func (s *Server) callKnowledgeTool(name string, args map[string]interface{}) (*T
 				return nil, true, fmt.Errorf("supersedes harus id node (mis. 12 atau K12), dapat %q", raw)
 			}
 		}
+		// Lewat MCP, agent hanya boleh langsung menyembunyikan node tulisan agent; node lain cukup diusulkan.
+		if note.Supersedes != 0 {
+			var old models.KnowledgeNode
+			if s.db.Where("id = ?", note.Supersedes).Limit(1).Find(&old).Error == nil && old.ID != 0 {
+				note.ProposeSupersede = !knowledge.AgentMaySupersede(&old, note.OwnerEmployeeID)
+			}
+		}
 		if v := strings.TrimSpace(argString(args, "valid_until")); v != "" {
 			t, err := time.ParseInLocation("2006-01-02", v, time.Local)
 			if err != nil {
@@ -104,7 +112,13 @@ func (s *Server) callKnowledgeTool(name string, args map[string]interface{}) (*T
 			res, jerr := jsonResult(map[string]interface{}{"node": node, "merged_into_existing": merged, "supersede_error": err.Error()})
 			return res, true, jerr
 		}
-		res, err := jsonResult(map[string]interface{}{"node": node, "merged_into_existing": merged})
+		out := map[string]interface{}{"node": node, "merged_into_existing": merged}
+		if note.ProposeSupersede {
+			out["supersede_pending_review"] = true
+			out["supersede_note"] = fmt.Sprintf("K%d is curated knowledge, so it was NOT replaced: it is still recalled and is now "+
+				"flagged for review with K%d as the proposed replacement. The replacement waits for an owner's review.", note.Supersedes, node.ID)
+		}
+		res, err := jsonResult(out)
 		return res, true, err
 	case "vibeasik_knowledge_feedback":
 		helpful, _ := args["helpful"].(bool)

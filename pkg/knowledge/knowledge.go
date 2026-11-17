@@ -39,10 +39,13 @@ type Note struct {
 	OwnerName       string   `json:"owner_name,omitempty"`
 	Weight          int      `json:"weight"`
 	// Masa berlaku (hanya Learn): AppliesTo = batas berlaku dalam teks pendek, ValidUntil = batas waktu,
-	// Supersedes = node yang digantikan butir ini (lihat Supersede).
-	AppliesTo  string     `json:"applies_to,omitempty"`
-	ValidUntil *time.Time `json:"valid_until,omitempty"`
-	Supersedes uint       `json:"supersedes,omitempty"`
+	// Supersedes = node yang digantikan butir ini (lihat Supersede). ProposeSupersede: Supersedes hanya diusulkan —
+	// node lama tetap dikirim temu-kembali dan ditandai perlu ditinjau (jalur agent untuk node yang tidak boleh ia
+	// gantikan langsung, lihat AgentMaySupersede).
+	AppliesTo        string     `json:"applies_to,omitempty"`
+	ValidUntil       *time.Time `json:"valid_until,omitempty"`
+	Supersedes       uint       `json:"supersedes,omitempty"`
+	ProposeSupersede bool       `json:"propose_supersede,omitempty"`
 }
 
 const (
@@ -114,7 +117,11 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 		if db.Where("id = ?", n.Supersedes).Limit(1).Find(&old).Error != nil || old.ID == 0 {
 			return nil, false, fmt.Errorf("node %d yang hendak digantikan tidak ditemukan", n.Supersedes)
 		}
-		if err := checkSupersede(&old, n.OwnerEmployeeID, n.Source); err != nil {
+		if n.ProposeSupersede {
+			if old.Status != models.KnowledgeNodeActive {
+				return nil, false, fmt.Errorf("K%d tidak aktif (%s); hanya node aktif yang bisa digantikan", old.ID, old.Status)
+			}
+		} else if err := checkSupersede(&old, n.OwnerEmployeeID, n.Source); err != nil {
 			return nil, false, err
 		}
 	}
@@ -127,7 +134,7 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 		var old models.KnowledgeNode
 		if db.First(&old, dups[0].e.id).Error == nil {
 			kept := reinforce(db, &old, n)
-			return kept, true, supersedeBy(db, n.Supersedes, kept.ID)
+			return kept, true, n.supersede(db, kept)
 		}
 	}
 	node := models.KnowledgeNode{
@@ -138,7 +145,7 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 	if err := db.Create(&node).Error; err != nil {
 		return nil, false, err
 	}
-	if err := supersedeBy(db, n.Supersedes, node.ID); err != nil {
+	if err := n.supersede(db, &node); err != nil {
 		return &node, false, err
 	}
 	var links []models.KnowledgeLink
@@ -153,11 +160,18 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 	return &node, false, nil
 }
 
-// supersedeBy: lanjutan Learn dengan Note.Supersedes (0 = tidak ada).
-func supersedeBy(db *gorm.DB, oldID, newID uint) error {
-	if oldID == 0 {
+// supersede: lanjutan Learn dengan Note.Supersedes (0 = tidak ada): diterapkan, atau hanya diusulkan.
+func (n *Note) supersede(db *gorm.DB, repl *models.KnowledgeNode) error {
+	switch {
+	case n.Supersedes == 0:
 		return nil
+	case n.ProposeSupersede:
+		return proposeSupersede(db, n.Supersedes, repl)
 	}
+	return supersedeBy(db, n.Supersedes, repl.ID)
+}
+
+func supersedeBy(db *gorm.DB, oldID, newID uint) error {
 	if _, err := Supersede(db, oldID, newID, "dicatat lewat Learn"); err != nil {
 		return fmt.Errorf("K%d tersimpan, tetapi K%d tidak bisa ditandai digantikan: %w", newID, oldID, err)
 	}

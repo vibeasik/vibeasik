@@ -247,7 +247,7 @@ func prune(db *gorm.DB) (retired, flagged int) {
 	db.Where("status = ? AND needs_review = ?", models.KnowledgeNodeActive, true).Find(&recovered)
 	outdated := outdatedNodes(db, time.Now())
 	for _, n := range recovered {
-		if _, stale := outdated[n.ID]; !stale && n.StrongUtility() >= recoverMinUtility {
+		if _, stale := outdated[n.ID]; !stale && !strings.HasPrefix(n.StatusReason, supersedeProposal) && n.StrongUtility() >= recoverMinUtility {
 			db.Model(&n).UpdateColumn("needs_review", false)
 		}
 	}
