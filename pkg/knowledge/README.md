@@ -123,6 +123,27 @@ Langkahnya:
 4. **Keberagaman**: satu klaster maksimal separuh hasil.
 5. Ambil `Limit` teratas.
 
+### 3.4 Mengukur mutu peringkat (`Evaluate`, `vibeasik knowledge eval`)
+
+Set uji dibangun dari riwayat todo sendiri, tanpa menulis apa pun ke database:
+
+- **Kueri** = judul + keterangan + aplikasi target + kategori todo (sama dengan prompt pegawai), pengetahuan
+  pribadi pegawai yang ditugaskan ikut, daftar 15 butir.
+- **Label kuat** = node yang disebut di baris `PENGETAHUAN: K<id>, …` catatan penyelesaian todo yang lulus QA
+  (nilai ≥ 75). **Label lemah** = pemakaian di konteks `todo:<id>` yang bernilai helpful.
+- **Aturan kebocoran**: node yang dibuat setelah todo dibuat tidak ikut sebagai kandidat maupun label.
+- Metrik: recall@k, nDCG@k (relevansi biner), MRR@k — total dan per domain utama kueri.
+
+`--now` menetapkan acuan kebaruan sekaligus batas data agar dua putaran memberi angka yang sama; `--weights`
+menjalankan varian bobot tanpa mengubah `Recall`. Label hanya ada untuk node yang pernah ditampilkan peringkat
+lama, jadi angkanya pembanding antar varian, bukan ukuran mutu mutlak.
+
+```bash
+vibeasik knowledge eval --now 2026-11-18            # tabel ringkas
+vibeasik knowledge eval --now 2026-11-18 --json     # lengkap, per domain
+vibeasik knowledge eval --weights 0.6,0.2,0.1,0.1   # varian bobot
+```
+
 ---
 
 ## 4. Input — dari mana pengetahuan masuk
@@ -277,9 +298,10 @@ Celah yang diabaikan manusia tidak dibuka otomatis lagi.
 | Tautan minimal (`linkMin`) / tautan per node | 0,25 / 3 | `knowledge.go`, `curate.go` |
 | Lebur saat kurasi (`mergeMin`) | 0,85 | `curate.go` |
 | Klaster (`clusterMin`) | 0,3 | `curate.go` |
-| Relevansi minimal (`minRelevance`) | 0,08 | `recall.go` |
-| Bonus domain (`domainBonus`) | 0,12 | `recall.go` |
-| Peluruhan kebaruan (`recencyDays`) | 45 hari | `recall.go` |
+| Bobot skor relevansi / utilitas / kepentingan / kebaruan (`DefaultRankWeights`) | 0,55 / 0,20 / 0,15 / 0,10 | `recall.go` |
+| Relevansi minimal (`DefaultRankWeights.MinRelevance`) | 0,08 | `recall.go` |
+| Bonus domain (`DefaultRankWeights.DomainBonus`) | 0,12 | `recall.go` |
+| Peluruhan kebaruan (`DefaultRankWeights.RecencyDays`) | 45 hari | `recall.go` |
 | Minimal node sebelum celah dicatat (`minGapCorpus`) | 20 | `recall.go` |
 | Interval kurator | 15 menit (pertama 20 dtk setelah start) | `curate.go` |
 | Tunggu hasil pemakaian (`verdictWait`) | 7 hari | `settle.go` |
