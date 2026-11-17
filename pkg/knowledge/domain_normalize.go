@@ -13,6 +13,35 @@ import (
 // bukti, dan updated_at tidak disentuh, dan tidak ada baris yang dihapus. Idempoten: setelah diterapkan,
 // jalankan ulang tidak menghasilkan perubahan.
 
+// legacyDomainLabels: peta migrasi baris lama — label yang hanya dipetakan untuk baris yang sudah tersimpan,
+// tidak oleh CanonicalDomain, DetectDomains, maupun jalur tulis. Isinya nama sampah hasil deteksi otomatis lama
+// (ekstensi/potongan path seperti msi, pro, xlsx) dan sub-bidang yang tujuannya dipilih menurut isi baris yang ada,
+// bukan karena sinonim. Label yang sama pada pekerjaan baru tidak boleh ikut dipetakan: berkas .msi bukan
+// dokumentasi dan .pro bukan android. Node berlabel ini juga beredar lewat paket hub, jadi engine yang memasangnya
+// mendapat pemetaan yang sama. Bila ragu, area lintas ekosistem lebih aman daripada ekosistem karena node di
+// ekosistem yang salah tersaring dari todo yang semestinya (lihat Recall).
+var legacyDomainLabels = map[string]string{
+	// area
+	"audit": "testing", "resolve": "testing", "data": "database",
+	"release": "devops", "rollback": "devops", "configuration": "devops", "git": "devops", "shell": "devops",
+	"linux": "devops", "windows": "devops", "mji": "devops", "current": "devops",
+	"api": "backend", "server": "backend", "reliability": "backend", "billing": "backend", "sheet": "backend",
+	"xlsx": "backend", "run": "mobile", "other": "observability", "debugging": "observability",
+	"msi": "documentation", "software_engineering": "code_quality", "tooling": "code_quality", "typescript": "code_quality",
+	"engineering": "process", "quality": "process", "general": "process", "workflow": "process",
+	"software": "architecture", "frontend_architecture": "architecture", "product": "planning",
+	// ekosistem
+	"avif": "web", "gradle": "android", "pro": "android", "mounted": "flutter", "builder": "flutter", "resolved": "ios",
+}
+
+// legacyDomain: domain tetap untuk label baris lama — peta migrasi lebih dulu, lalu alias permanen.
+func legacyDomain(d string) string {
+	if c, ok := legacyDomainLabels[domainKey(d)]; ok {
+		return c
+	}
+	return CanonicalDomain(d)
+}
+
 // DomainChange: satu label lama di satu tabel beserta label tetapnya.
 type DomainChange struct {
 	Table  string `json:"table"`
@@ -72,7 +101,7 @@ func NormalizeDomains(db *gorm.DB, apply bool) (DomainReport, error) {
 			return rep, err
 		}
 		for _, r := range rows {
-			to := CanonicalDomain(r.Domain)
+			to := legacyDomain(r.Domain)
 			if t.name == "knowledge_nodes" && r.Active > 0 {
 				if r.Domain != "" {
 					before[r.Domain] += r.Active

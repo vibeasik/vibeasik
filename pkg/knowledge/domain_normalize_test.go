@@ -11,11 +11,13 @@ import (
 func TestCanonicalDomainAliases(t *testing.T) {
 	cases := map[string]string{
 		"clean-code": "code_quality", "clean_code": "code_quality", "code_quality": "code_quality", "Refactoring": "code_quality",
-		"frontend architecture": "architecture", "release-engineering": "devops", "release": "devops", "deployment": "devops",
+		"release-engineering": "devops", "deployment": "devops", "SQL": "database",
 		"UX": "ui_ux", "ui_ux": "ui_ux", " docs ": "documentation", "documentation": "documentation",
-		"frontend": "web", "vue": "web", "mounted": "flutter", "gradle": "android", "other": "observability",
-		"marketing": "business", "event-driven-backend": "backend", "go": "go", "security": "security",
-		"gleam": "gleam", "": "",
+		"frontend": "web", "vue": "web", "marketing": "business", "event-driven-backend": "backend",
+		"go": "go", "security": "security", "gleam": "gleam", "": "",
+		// label baris lama bukan alias permanen: dikembalikan dalam bentuk baku tanpa dipetakan
+		"msi": "msi", "pro": "pro", "gradle": "gradle", "other": "other", "mounted": "mounted", "release": "release",
+		"frontend architecture": "frontend_architecture", "typescript": "typescript",
 	}
 	for in, want := range cases {
 		if got := CanonicalDomain(in); got != want {
@@ -26,19 +28,48 @@ func TestCanonicalDomainAliases(t *testing.T) {
 
 func TestAliasTargetsAreCanonical(t *testing.T) {
 	canon := CanonicalDomains()
-	for from, to := range domainAliases {
-		if domainKey(from) != from {
-			t.Errorf("kunci alias %q harus berbentuk baku %q", from, domainKey(from))
+	for name, m := range map[string]map[string]string{"alias permanen": domainAliases, "peta migrasi": legacyDomainLabels} {
+		for from, to := range m {
+			if domainKey(from) != from {
+				t.Errorf("%s: kunci %q harus berbentuk baku %q", name, from, domainKey(from))
+			}
+			if !KnownDomain(to) || !slices.Contains(canon, to) {
+				t.Errorf("%s: %q → %q: tujuan bukan domain tetap", name, from, to)
+			}
+			if KnownDomain(from) {
+				t.Errorf("%s: %q menimpa domain tetap", name, from)
+			}
+			if CanonicalDomain(to) != to || legacyDomain(to) != to || legacyDomain(legacyDomain(from)) != to {
+				t.Errorf("%s: %q tidak idempoten", name, from)
+			}
 		}
-		if !KnownDomain(to) || !slices.Contains(canon, to) {
-			t.Errorf("alias %q → %q: tujuan bukan domain tetap", from, to)
+	}
+	for from := range legacyDomainLabels {
+		if _, dup := domainAliases[from]; dup {
+			t.Errorf("%q ada di alias permanen sekaligus peta migrasi", from)
 		}
-		if KnownDomain(from) {
-			t.Errorf("alias %q menimpa domain tetap", from)
+	}
+}
+
+// Peta migrasi hanya untuk baris lama: deteksi & jalur tulis pekerjaan baru tidak ikut memetakannya.
+func TestLegacyLabelsOnlyForNormalize(t *testing.T) {
+	for from, to := range map[string]string{"msi": "documentation", "pro": "android", "xlsx": "backend", "Typescript": "code_quality"} {
+		if got := legacyDomain(from); got != to {
+			t.Errorf("legacyDomain(%q) = %q, mau %q", from, got, to)
 		}
-		if CanonicalDomain(to) != to || CanonicalDomain(CanonicalDomain(from)) != to {
-			t.Errorf("alias %q tidak idempoten", from)
+		if got := CanonicalDomain(from); got == to {
+			t.Errorf("CanonicalDomain(%q) tidak boleh memakai peta migrasi", from)
 		}
+	}
+	ds := DetectDomains("Unggah dist/setup.msi, assets/hero.avif, data/rekap.xlsx dan app/proguard-rules.pro")
+	for _, bad := range []string{"documentation", "android", "web", "backend", "msi", "avif", "xlsx", "pro"} {
+		if slices.Contains(ds, bad) {
+			t.Errorf("DetectDomains memetakan berkas non-kode ke %q: %v", bad, ds)
+		}
+	}
+	db := testDB(t)
+	if n := mustLearn(t, db, Note{Kind: "rule", Domain: "msi", Title: "Tanda tangan installer", Content: "Installer MSI ditandatangani sebelum rilis."}); n.Domain != "msi" {
+		t.Fatalf("jalur tulis tidak boleh memakai peta migrasi, dapat %q", n.Domain)
 	}
 }
 
@@ -53,7 +84,7 @@ func TestEcosystemOfAliases(t *testing.T) {
 	}
 	ds := DetectDomains("Perbaiki android/app/build.gradle dan android/app/proguard-rules.pro")
 	if !slices.Contains(ds, "android") || slices.Contains(ds, "gradle") || slices.Contains(ds, "pro") {
-		t.Fatalf("ekstensi yang punya alias harus dikenali sebagai domain tetapnya, dapat %v", ds)
+		t.Fatalf("berkas build Android dikenali sebagai android, bukan ekosistem baru dari ekstensinya, dapat %v", ds)
 	}
 }
 

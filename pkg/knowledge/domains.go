@@ -39,6 +39,7 @@ var nonCodeExt = map[string]bool{
 	".jar": true, ".apk": true, ".aab": true, ".ipa": true, ".deb": true, ".rpm": true, ".tar": true, ".tgz": true,
 	".pid": true, ".cache": true, ".out": true, ".old": true, ".jsonl": true, ".mdx": true, ".mts": true, ".cts": true,
 	".bat": true, ".cmd": true, ".tsbuildinfo": true, ".html5": true, ".htm": true,
+	".msi": true, ".avif": true, ".xls": true, ".xlsx": true, ".gradle": true, ".pro": true, ".resolved": true,
 }
 
 // keywordDomains: kata kunci teks → ekosistem/area.
@@ -77,36 +78,22 @@ var areaDomains = map[string]bool{
 	"process": true, "business": true, "documentation": true, "code_quality": true,
 }
 
-// domainAliases memetakan label domain yang pernah tersimpan ke domain tetap (kunci sudah melewati domainKey):
-// ejaan ganda, sub-bidang yang terlalu sempit untuk berdiri sendiri, dan nama sampah hasil deteksi ekstensi
-// berkas. Tujuan sampah dipilih dari isi node-nya; bila ragu, area lintas ekosistem lebih aman daripada
-// ekosistem karena node di ekosistem yang salah tersaring dari todo yang semestinya (lihat Recall).
+// domainAliases: alias permanen — sinonim dan ejaan lain yang benar secara umum untuk domain tetap (kunci sudah
+// melewati domainKey). Dipakai semua jalur: CanonicalDomain, DetectDomains, jalur tulis, dan Recall. Label yang
+// hanya benar untuk baris lama tertentu (nama sampah hasil deteksi otomatis, sub-bidang yang dipetakan menurut
+// isi node-nya) tidak boleh masuk sini; tempatnya legacyDomainLabels di domain_normalize.go.
 var domainAliases = map[string]string{
 	// area
 	"ui": "ui_ux", "ux": "ui_ux", "design": "ui_ux", "accessibility": "ui_ux", "a11y": "ui_ux",
-	"test": "testing", "tests": "testing", "qa": "testing", "audit": "testing", "resolve": "testing",
-	"sql": "database", "db": "database", "migration": "database", "data": "database",
-	"deployment": "devops", "deploy": "devops", "release": "devops", "release_engineering": "devops", "ops": "devops",
-	"rollback": "devops", "configuration": "devops", "git": "devops", "shell": "devops", "linux": "devops",
-	"windows": "devops", "mji": "devops", "current": "devops",
-	"api": "backend", "server": "backend", "event_driven_backend": "backend", "reliability": "backend",
-	"billing": "backend", "sheet": "backend", "xlsx": "backend",
-	"run":   "mobile",
-	"other": "observability", "debugging": "observability", "error_handling": "observability", "logging": "observability",
-	"docs": "documentation", "doc": "documentation", "msi": "documentation",
+	"test": "testing", "tests": "testing", "qa": "testing",
+	"sql": "database", "db": "database", "migration": "database",
+	"deployment": "devops", "deploy": "devops", "release_engineering": "devops", "ops": "devops",
+	"event_driven_backend": "backend", "error_handling": "observability", "logging": "observability",
+	"docs": "documentation", "doc": "documentation",
 	"clean_code": "code_quality", "refactoring": "code_quality", "refactor": "code_quality",
-	"software_engineering": "code_quality", "tooling": "code_quality", "typescript": "code_quality",
-	"engineering": "process", "quality": "process", "general": "process", "workflow": "process",
-	"software": "architecture", "frontend_architecture": "architecture",
-	"product": "planning", "project_management": "planning",
-	"marketing": "business", "accounting": "business",
+	"project_management": "planning", "marketing": "business", "accounting": "business",
 	// ekosistem
-	"frontend": "web", "vue": "web", "nuxt": "web", "avif": "web",
-	"golang": "go",
-	"gradle": "android", "pro": "android", "kotlin": "android",
-	"mounted": "flutter", "builder": "flutter",
-	"resolved": "ios", "swift": "ios",
-	"java": "jvm",
+	"frontend": "web", "vue": "web", "nuxt": "web", "golang": "go", "kotlin": "android", "swift": "ios", "java": "jvm",
 }
 
 // domainKey: bentuk baku sebuah label — huruf kecil, spasi & tanda hubung menjadi garis bawah.
