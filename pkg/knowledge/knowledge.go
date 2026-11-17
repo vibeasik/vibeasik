@@ -297,38 +297,6 @@ func Feedback(db *gorm.DB, id uint, helpful bool) (*models.KnowledgeNode, error)
 	return &n, nil
 }
 
-// recordUse mencatat node yang disisipkan ke sebuah pekerjaan (konteks yang sama tidak dicatat dua kali selama
-// belum dinilai) dan menaikkan hitungan pakai & waktu terakhir dipakai.
-func recordUse(db *gorm.DB, ctx string, employeeID uint, ids []uint) {
-	if ctx == "" || len(ids) == 0 {
-		return
-	}
-	var pending []uint
-	db.Model(&models.KnowledgeUse{}).Where("context = ? AND outcome = ?", ctx, "").Pluck("node_id", &pending)
-	had := map[uint]bool{}
-	for _, id := range pending {
-		had[id] = true
-	}
-	var emp *uint
-	if employeeID > 0 {
-		emp = &employeeID
-	}
-	var rows []models.KnowledgeUse
-	var fresh []uint
-	for _, id := range ids {
-		if !had[id] {
-			rows = append(rows, models.KnowledgeUse{NodeID: id, Context: clip(ctx, 190), EmployeeID: emp})
-			fresh = append(fresh, id)
-		}
-	}
-	if len(rows) == 0 {
-		return
-	}
-	db.Create(&rows)
-	db.Model(&models.KnowledgeNode{}).Where("id IN ?", fresh).
-		UpdateColumns(map[string]interface{}{"uses": gorm.Expr("uses + 1"), "last_used_at": time.Now()})
-}
-
 // Reward menilai node yang dipakai di sebuah konteks begitu hasil kerjanya diketahui (nilai QA 0–100, vonis audit):
 // ≥75 = membantu, <50 = merugikan, di antaranya netral. Untuk konteks todo:<id>, node yang dikutip agent di baris
 // "PENGETAHUAN: K<id>" catatan penyelesaian todo itu ikut dibaca (lihat RewardCited). Mengembalikan jumlah
@@ -346,7 +314,9 @@ func Reward(db *gorm.DB, ctx string, score int) int {
 //   - hasil buruk: semua node yang disisipkan hanya mendapat ✗ lemah. Nilai todo yang rendah tidak menunjukkan
 //     node mana yang keliru (bisa karena build, alat, lingkungan, atau cara kerja agent), jadi ✗ kuat hanya datang
 //     dari vonis eksplisit (Judge, Feedback);
-//   - node yang sudah divonis penilai di ctx (Judge) tidak dinilai lagi: pemakaiannya mengikuti vonis itu.
+//   - node yang sudah divonis penilai di ctx (Judge) tidak dinilai lagi: pemakaiannya mengikuti vonis itu;
+//   - pemakaian yang dibuka lagi karena pekerjaannya diulang (recordUse) dicabut dulu bukti lamanya, jadi
+//     penilaian ulang menggantikan penilaian sebelumnya, bukan menambahinya.
 //
 // Kutipan atas node yang tidak disisipkan ke ctx diabaikan: tidak ada bukti node itu benar-benar ditampilkan.
 // Node sumber berkedudukan tinggi (models.AuthoritativeSources, mis. Galeri Desain) tetap tercatat hasilnya, tetapi
@@ -361,6 +331,7 @@ func RewardCited(db *gorm.DB, ctx string, score int, cited []uint) int {
 	if len(ids) == 0 {
 		return 0
 	}
+	revokeReopened(db, ctx, ids)
 	judged := verdictsIn(db, ctx, ids)
 	var strongDone []uint
 	db.Model(&models.KnowledgeUse{}).Where("context = ? AND node_id IN ? AND evidence IN ?", ctx, ids,
@@ -529,8 +500,11 @@ func Judge(db *gorm.DB, ctx string, verdicts map[uint]bool) int {
 		if len(nodes) == 0 {
 			return
 		}
+		// Pemakaian yang dibuka lagi (bukti lamanya belum dicabut) dibiarkan menunggu: Reward mencabut bukti lamanya
+		// lalu mengikuti vonis ini, atau SettleStale memulihkannya.
 		db.Model(&models.KnowledgeUse{}).
-			Where("context = ? AND node_id IN ? AND (outcome = ? OR evidence = ?)", ctx, nodes, "", models.KnowledgeEvidenceVerdict).
+			Where("context = ? AND node_id IN ? AND ((outcome = ? AND COALESCE(evidence, '') NOT LIKE ?) OR evidence = ?)",
+				ctx, nodes, "", reopenPrefix+"%", models.KnowledgeEvidenceVerdict).
 			Updates(map[string]interface{}{"outcome": outcome, "evidence": models.KnowledgeEvidenceVerdict})
 	}
 	mark(incOK, models.KnowledgeOutcomeHelpful)

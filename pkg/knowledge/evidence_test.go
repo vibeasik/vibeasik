@@ -98,10 +98,11 @@ func TestRewardGivesStrongOnlyToCitedNodes(t *testing.T) {
 	if k999 != 0 {
 		t.Fatal("kutipan atas node yang tidak disisipkan tidak membuat apa pun")
 	}
-	// Todo yang dinilai ulang (prompt dibangun lagi) tidak memberi ✓ kuat kedua dari kutipan yang sama.
+	// Todo yang dinilai ulang (prompt dibangun lagi) tidak memberi ✓ kedua dari kutipan yang sama: penilaian ulang
+	// menggantikan yang lama.
 	recordUse(db, "todo:7", 0, ids[:1])
 	Reward(db, "todo:7", 90)
-	if a = node(t, db, ids[0]); a.Helpful != 1 || a.WeakHelpful != 1 {
+	if a = node(t, db, ids[0]); a.Helpful != 1 || a.WeakHelpful != 0 || a.Uses != 1 {
 		t.Fatalf("kutipan sama di konteks sama hanya sekali kuat: %+v", a)
 	}
 }

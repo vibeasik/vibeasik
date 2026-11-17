@@ -24,7 +24,8 @@ const (
 
 // SettleStale menutup pemakaian yang tidak akan pernah mendapat hasil sebagai netral, sehingga hitungan
 // "menunggu nilai" hanya berisi pekerjaan yang memang masih berjalan. ✓/✗ node tidak berubah: tanpa hasil kerja
-// yang dinilai tidak ada bukti untuk node itu. Yang ditutup:
+// yang dinilai tidak ada bukti untuk node itu. Pemakaian yang dibuka lagi karena pekerjaannya diulang dipulihkan ke
+// nilai sebelumnya, bukan dinetralkan. Yang ditutup:
 //   - pemakaian yang lebih tua dari verdictWait, apa pun konteksnya;
 //   - todo yang sudah dihapus;
 //   - todo selesai yang sudah bernilai lebih dari reviewGrace: penilaiannya sudah lewat, jadi pemakaian yang
@@ -37,13 +38,10 @@ func SettleStale(db *gorm.DB, now time.Time) int {
 		return 0
 	}
 	settled := 0
-	res := db.Model(&models.KnowledgeUse{}).
-		Where("outcome = ? AND created_at < ?", "", now.Add(-verdictWait)).
-		Update("outcome", models.KnowledgeOutcomeNeutral)
-	if res.Error != nil {
-		log.Printf("[Knowledge] menutup pemakaian tanpa hasil gagal: %v", res.Error)
-	} else {
-		settled += int(res.RowsAffected)
+	n, err := closePending(db, func(q *gorm.DB) *gorm.DB { return q.Where("created_at < ?", now.Add(-verdictWait)) })
+	settled += n
+	if err != nil {
+		log.Printf("[Knowledge] menutup pemakaian tanpa hasil gagal: %v", err)
 	}
 
 	var contexts []string
@@ -81,14 +79,12 @@ func SettleStale(db *gorm.DB, now time.Time) int {
 		stale = append(stale, c)
 	}
 	for i := 0; i < len(stale); i += settleBatch {
-		res := db.Model(&models.KnowledgeUse{}).
-			Where("outcome = ? AND context IN ?", "", stale[i:min(i+settleBatch, len(stale))]).
-			Update("outcome", models.KnowledgeOutcomeNeutral)
-		if res.Error != nil {
-			log.Printf("[Knowledge] menutup pemakaian todo tanpa hasil gagal: %v", res.Error)
-			continue
+		part := stale[i:min(i+settleBatch, len(stale))]
+		n, err := closePending(db, func(q *gorm.DB) *gorm.DB { return q.Where("context IN ?", part) })
+		settled += n
+		if err != nil {
+			log.Printf("[Knowledge] menutup pemakaian todo tanpa hasil gagal: %v", err)
 		}
-		settled += int(res.RowsAffected)
 	}
 	return settled
 }
