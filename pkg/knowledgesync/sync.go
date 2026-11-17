@@ -29,6 +29,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/vibeasik/vibeasik/pkg/account"
+	"github.com/vibeasik/vibeasik/pkg/knowledge"
 	"github.com/vibeasik/vibeasik/pkg/localauth"
 	"github.com/vibeasik/vibeasik/pkg/models"
 	"github.com/vibeasik/vibeasik/pkg/security"
@@ -212,6 +213,7 @@ func importPack(db *gorm.DB, p *pack) (*Result, error) {
 	err := db.Transaction(func(tx *gorm.DB) error {
 		for _, n := range p.Nodes {
 			key := "hub:" + strings.TrimPrefix(n.Key, "hub:")
+			n.Domain = knowledge.CanonicalDomain(n.Domain) // paket lama masih memakai label domain sebelum penyatuan
 			var local models.KnowledgeNode
 			// Sudah dimiliki sumber lokal lain dengan kunci asli → lewati.
 			if n.Key != "" && !strings.HasPrefix(n.Key, "hub:") {

@@ -129,6 +129,9 @@ func List(db *gorm.DB, f Filter) []Hit {
 	if f.Limit <= 0 || f.Limit > 300 {
 		f.Limit = 100
 	}
+	if f.Domain != "" {
+		f.Domain = CanonicalDomain(f.Domain)
+	}
 	if strings.TrimSpace(f.Text) != "" && (f.Status == "" || f.Status == models.KnowledgeNodeActive) {
 		return listByRecall(db, f)
 	}

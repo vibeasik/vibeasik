@@ -74,7 +74,73 @@ var ecosystems = map[string]bool{}
 var areaDomains = map[string]bool{
 	"security": true, "testing": true, "performance": true, "devops": true, "database": true, "planning": true,
 	"architecture": true, "backend": true, "mobile": true, "ai": true, "observability": true, "ui_ux": true,
-	"process": true, "business": true,
+	"process": true, "business": true, "documentation": true, "code_quality": true,
+}
+
+// domainAliases memetakan label domain yang pernah tersimpan ke domain tetap (kunci sudah melewati domainKey):
+// ejaan ganda, sub-bidang yang terlalu sempit untuk berdiri sendiri, dan nama sampah hasil deteksi ekstensi
+// berkas. Tujuan sampah dipilih dari isi node-nya; bila ragu, area lintas ekosistem lebih aman daripada
+// ekosistem karena node di ekosistem yang salah tersaring dari todo yang semestinya (lihat Recall).
+var domainAliases = map[string]string{
+	// area
+	"ui": "ui_ux", "ux": "ui_ux", "design": "ui_ux", "accessibility": "ui_ux", "a11y": "ui_ux",
+	"test": "testing", "tests": "testing", "qa": "testing", "audit": "testing", "resolve": "testing",
+	"sql": "database", "db": "database", "migration": "database", "data": "database",
+	"deployment": "devops", "deploy": "devops", "release": "devops", "release_engineering": "devops", "ops": "devops",
+	"rollback": "devops", "configuration": "devops", "git": "devops", "shell": "devops", "linux": "devops",
+	"windows": "devops", "mji": "devops", "current": "devops",
+	"api": "backend", "server": "backend", "event_driven_backend": "backend", "reliability": "backend",
+	"billing": "backend", "sheet": "backend", "xlsx": "backend",
+	"run":   "mobile",
+	"other": "observability", "debugging": "observability", "error_handling": "observability", "logging": "observability",
+	"docs": "documentation", "doc": "documentation", "msi": "documentation",
+	"clean_code": "code_quality", "refactoring": "code_quality", "refactor": "code_quality",
+	"software_engineering": "code_quality", "tooling": "code_quality", "typescript": "code_quality",
+	"engineering": "process", "quality": "process", "general": "process", "workflow": "process",
+	"software": "architecture", "frontend_architecture": "architecture",
+	"product": "planning", "project_management": "planning",
+	"marketing": "business", "accounting": "business",
+	// ekosistem
+	"frontend": "web", "vue": "web", "nuxt": "web", "avif": "web",
+	"golang": "go",
+	"gradle": "android", "pro": "android", "kotlin": "android",
+	"mounted": "flutter", "builder": "flutter",
+	"resolved": "ios", "swift": "ios",
+	"java": "jvm",
+}
+
+// domainKey: bentuk baku sebuah label — huruf kecil, spasi & tanda hubung menjadi garis bawah.
+func domainKey(d string) string {
+	d = strings.ToLower(strings.Join(strings.Fields(d), "_"))
+	return strings.ReplaceAll(d, "-", "_")
+}
+
+// CanonicalDomain mengembalikan domain tetap untuk sebuah label. Label yang tidak dikenal dikembalikan dalam
+// bentuk baku (domainKey) tanpa dipetakan, karena bisa jadi ekosistem baru yang belum punya node (celah).
+func CanonicalDomain(d string) string {
+	k := domainKey(d)
+	if c, ok := domainAliases[k]; ok {
+		return c
+	}
+	return k
+}
+
+// KnownDomain: label adalah domain tetap (area, atau ekosistem yang dikenali dari ekstensi/kata kunci).
+func KnownDomain(d string) bool { return areaDomains[d] || ecosystems[d] }
+
+// CanonicalDomains: daftar domain tetap, urut abjad.
+func CanonicalDomains() []string {
+	out := make([]string, 0, len(areaDomains)+len(ecosystems))
+	for d := range areaDomains {
+		out = append(out, d)
+	}
+	for d := range ecosystems {
+		if !areaDomains[d] {
+			out = append(out, d)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func init() {
@@ -89,8 +155,11 @@ func init() {
 	ecosystems["dart"] = true // checklist audit Dart non-Flutter
 }
 
-// IsEcosystem: domain bahasa/framework (eksklusif), bukan area lintas ekosistem.
-func IsEcosystem(d string) bool { return ecosystems[d] || (d != "" && !areaDomains[d]) }
+// IsEcosystem: domain bahasa/framework (eksklusif), bukan area lintas ekosistem. Alias dinilai lewat domain tetapnya.
+func IsEcosystem(d string) bool {
+	d = CanonicalDomain(d)
+	return ecosystems[d] || (d != "" && !areaDomains[d])
+}
 
 var pathLike = regexp.MustCompile(`[\w./\[\]-]*[/\\][\w.\[\]-]+\.[a-z][a-z0-9]{0,7}\b|\b[\w-]+\.(?:vue|tsx|jsx|svelte|go|php|py|rb|rs|java|kt|kts|dart|swift|cs|cpp|ex|exs|zig|gleam|sol|lua|hs|scala|clj)\b`)
 
@@ -103,6 +172,7 @@ func DetectDomains(text string) []string {
 	seen := map[string]bool{}
 	var eco, area []string
 	add := func(d string) {
+		d = CanonicalDomain(d)
 		if d == "" || seen[d] {
 			return
 		}
@@ -157,7 +227,7 @@ func StackDomain(language, framework string) string {
 	if d := primaryDomain(lang); d != "" {
 		return d
 	}
-	return lang
+	return CanonicalDomain(lang)
 }
 
 // primaryDomain: domain utama sebuah teks (ekosistem pertama, lalu area pertama).

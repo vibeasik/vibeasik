@@ -57,7 +57,7 @@ func (n *Note) normalize() error {
 	if !validKind(n.Kind) {
 		n.Kind = models.KnowledgeKindLesson
 	}
-	n.Domain = strings.ToLower(strings.TrimSpace(n.Domain))
+	n.Domain = CanonicalDomain(n.Domain)
 	if n.Domain == "" {
 		n.Domain = primaryDomain(n.Title + "\n" + n.Content)
 	}

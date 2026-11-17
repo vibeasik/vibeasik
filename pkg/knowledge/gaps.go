@@ -24,6 +24,7 @@ func autoTopic(domain string) string { return "Teknologi baru: " + domain }
 
 // recordAutoGap mencatat (atau menambah hitungan) celah ekosistem tanpa node. Celah yang pernah diabaikan tidak dibuka lagi.
 func recordAutoGap(db *gorm.DB, domain, sample string) {
+	domain = CanonicalDomain(domain)
 	var g models.KnowledgeGap
 	if db.Where("domain = ? AND auto = ? AND status IN ?", domain, true,
 		[]string{models.KnowledgeGapOpen, models.KnowledgeGapLearning, models.KnowledgeGapDismissed}).Limit(1).Find(&g).Error == nil && g.ID != 0 {
@@ -37,7 +38,7 @@ func recordAutoGap(db *gorm.DB, domain, sample string) {
 
 // ReportGap mencatat celah yang dilaporkan agent/manusia (mis. metode baru di ekosistem yang sudah dikenal).
 func ReportGap(db *gorm.DB, domain, topic, sample string) (*models.KnowledgeGap, error) {
-	domain = strings.ToLower(strings.TrimSpace(domain))
+	domain = CanonicalDomain(domain)
 	topic = clip(topic, 180)
 	if topic == "" {
 		return nil, errors.New("topik celah wajib diisi")
