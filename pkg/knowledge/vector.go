@@ -215,10 +215,13 @@ func (ix *index) idf(t string) float64 {
 
 // weigh mengubah frekuensi kata menjadi vektor TF-IDF ternormalisasi. Untuk kueri, kata yang tidak ada di korpus
 // dibuang (tidak mungkin cocok); untuk node baru (keepUnseen) kata itu justru pembeda yang harus ikut dihitung.
+// Kata dijumlahkan berurutan agar hasil penjumlahan floating-point sama persis di setiap pemanggilan
+// (urutan map Go acak; selisih bit terakhir bisa membalik urutan dua node yang skornya hampir sama).
 func (ix *index) weigh(tf map[string]float64, keepUnseen bool) vec {
 	v := vec{}
 	norm := 0.0
-	for t, f := range tf {
+	for _, t := range sortedTerms(tf) {
+		f := tf[t]
 		if ix.df[t] == 0 && !keepUnseen {
 			continue
 		}
@@ -254,7 +257,8 @@ type neighbor struct {
 // nearest: k node paling mirip dengan v (kosinus ≥ min), lewat posting list agar tidak membandingkan semua pasangan.
 func (ix *index) nearest(v vec, k int, min float64, skip func(*entry) bool) []neighbor {
 	acc := map[int]float64{}
-	for t, w := range v {
+	for _, t := range sortedTerms(v) {
+		w := v[t]
 		ps := ix.postings[t]
 		if len(ps)*2 > ix.n && ix.n > 20 {
 			continue // kata yang ada di lebih dari separuh node tidak membedakan
@@ -275,6 +279,16 @@ func (ix *index) nearest(v vec, k int, min float64, skip func(*entry) bool) []ne
 	if k > 0 && len(out) > k {
 		out = out[:k]
 	}
+	return out
+}
+
+// sortedTerms: kunci map kata secara berurutan (penjumlahan deterministik).
+func sortedTerms[M ~map[string]float64](m M) []string {
+	out := make([]string, 0, len(m))
+	for t := range m {
+		out = append(out, t)
+	}
+	sort.Strings(out)
 	return out
 }
 
