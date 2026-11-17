@@ -133,6 +133,8 @@ type entry struct {
 	source string
 	key    string
 	v      vec
+	tf     map[string]float64 // frekuensi kata berbobot (judul/tag ×2) untuk BM25
+	dl     float64            // panjang dokumen = jumlah tf
 }
 
 type index struct {
@@ -143,6 +145,7 @@ type index struct {
 	byID     map[uint]*entry
 	domainN  map[string]int // jumlah node aktif per domain (deteksi celah)
 	postings map[string][]int
+	avgdl    float64 // rata-rata panjang dokumen (BM25)
 }
 
 var (
@@ -193,7 +196,11 @@ func build(db *gorm.DB, sig string) *index {
 		}
 	}
 	for i, r := range rows {
-		e := &entry{id: r.ID, kind: r.Kind, domain: r.Domain, source: r.Source, key: r.Key, v: ix.weigh(tfs[i], false)}
+		e := &entry{id: r.ID, kind: r.Kind, domain: r.Domain, source: r.Source, key: r.Key, v: ix.weigh(tfs[i], false), tf: tfs[i]}
+		for _, f := range tfs[i] {
+			e.dl += f
+		}
+		ix.avgdl += e.dl
 		if r.OwnerEmployeeID != nil {
 			e.owner = *r.OwnerEmployeeID
 		}
@@ -205,6 +212,9 @@ func build(db *gorm.DB, sig string) *index {
 		for t := range e.v {
 			ix.postings[t] = append(ix.postings[t], i)
 		}
+	}
+	if ix.n > 0 {
+		ix.avgdl /= float64(ix.n)
 	}
 	return ix
 }

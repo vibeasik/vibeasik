@@ -57,6 +57,18 @@ type RankWeights struct {
 	RecencyDays  float64 `json:"recency_days"`  // skala peluruhan kebaruan (hari)
 	DomainBonus  float64 `json:"domain_bonus"`  // node di domain yang diminta tetap terangkat walau katanya tidak sama persis
 	MinRelevance float64 `json:"min_relevance"` // relevansi mentah minimal agar node menjadi kandidat
+
+	// Sisi relevansi (retrieval.go). Nilai nol = peringkat lama: kosinus TF-IDF tanpa perluasan kueri.
+	Lexical        string  `json:"lexical,omitempty"`         // LexicalTFIDF (kosong), LexicalBM25, LexicalRRF
+	Feedback       int     `json:"feedback,omitempty"`        // umpan balik semu: jumlah node hasil awal (0 = mati)
+	FeedbackTerms  int     `json:"feedback_terms,omitempty"`  // istilah yang ditambahkan ke kueri (0 = 10)
+	FeedbackWeight float64 `json:"feedback_weight,omitempty"` // bobot istilah tambahan relatif kata kueri (0 = 0.3)
+
+	// Pemangkasan ekor daftar (nilai nol = tanpa pemangkasan).
+	MaxLinked int     `json:"max_linked,omitempty"` // tetangga bertaut paling banyak di daftar akhir (<0 = tanpa tetangga)
+	TailRatio float64 `json:"tail_ratio,omitempty"` // buang butir yang skornya < TailRatio × skor butir teratas
+	MinScore  float64 `json:"min_score,omitempty"`  // buang butir yang skornya < MinScore
+	MaxHits   int     `json:"max_hits,omitempty"`   // panjang daftar paling banyak, walau Query.Limit lebih besar
 }
 
 // DefaultRankWeights: bobot yang dipakai Recall.
@@ -135,11 +147,7 @@ func rank(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude
 		return len(eco) == 0 || e.domain == "" || !IsEcosystem(e.domain) || eco[e.domain]
 	}
 
-	rel := map[uint]float64{}
-	qv := ix.queryVector(q.Text, "", strings.Join(domains, " "), nil)
-	for _, nb := range ix.nearest(qv, 0, 0.0001, func(e *entry) bool { return !allowed(e) }) {
-		rel[nb.e.id] = nb.sim
-	}
+	rel := ix.lexical(q.Text, strings.Join(domains, " "), w, func(e *entry) bool { return !allowed(e) })
 	want := setOf(domains)
 	for _, e := range ix.entries {
 		if want[e.domain] && allowed(e) {
@@ -168,8 +176,47 @@ func rank(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude
 	sortHits(hits)
 	hits = append(hits, expand(db, ix, hits, q.Limit, allowed, w, now)...)
 	sortHits(hits)
-	res.Hits = diversify(hits, q.Limit)
+	limit := q.Limit
+	if w.MaxHits > 0 && w.MaxHits < limit {
+		limit = w.MaxHits
+	}
+	res.Hits = trimTail(diversify(capLinked(hits, w.MaxLinked), limit), w)
 	return res
+}
+
+// capLinked membatasi jumlah tetangga bertaut (Via "tautan") di daftar; n 0 = tanpa batas, <0 = tanpa tetangga.
+func capLinked(h []Hit, n int) []Hit {
+	if n == 0 {
+		return h
+	}
+	out := h[:0:0]
+	linked := 0
+	for _, x := range h {
+		if x.Via != "" {
+			if n < 0 || linked >= n {
+				continue
+			}
+			linked++
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
+// trimTail membuang ekor daftar yang skornya jauh di bawah butir teratas atau di bawah ambang mutlak. Butir
+// teratas selalu dipertahankan agar pekerjaan yang punya kandidat tidak pulang dengan tangan kosong.
+func trimTail(h []Hit, w RankWeights) []Hit {
+	if len(h) == 0 || w.TailRatio <= 0 && w.MinScore <= 0 {
+		return h
+	}
+	floor := math.Max(w.MinScore, w.TailRatio*h[0].Score)
+	out := h[:1]
+	for _, x := range h[1:] {
+		if x.Score >= floor {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // scoreNodes memuat node kandidat dan menghitung skornya (relN = relevansi ternormalisasi 0–1).
