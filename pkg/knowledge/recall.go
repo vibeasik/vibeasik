@@ -112,7 +112,7 @@ func Recall(db *gorm.DB, q Query) Result {
 // nil) menyingkirkan node dari kandidat dan tetangga bertaut — dipakai evaluasi untuk membuang node yang belum ada
 // saat pekerjaan dimulai. q.Limit harus sudah dinormalkan pemanggil.
 func rank(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exclude func(*entry) bool) Result {
-	domains := uniq(append(lowerAll(q.Domains), DetectDomains(q.Text)...))
+	domains := uniq(append(canonicalAll(q.Domains), DetectDomains(q.Text)...))
 	res := Result{Domains: domains}
 	eco := map[string]bool{}
 	for _, d := range domains {
@@ -336,10 +336,12 @@ func uniq(xs []string) []string {
 	return out
 }
 
-func lowerAll(xs []string) []string {
+// canonicalAll memetakan domain dari pemanggil ke domain tetap (mis. "frontend" → "web"), sama seperti
+// DetectDomains dan label node, agar penyaringan ekosistem tidak membuang node domain yang sebenarnya diminta.
+func canonicalAll(xs []string) []string {
 	out := make([]string, 0, len(xs))
 	for _, x := range xs {
-		out = append(out, strings.ToLower(strings.TrimSpace(x)))
+		out = append(out, CanonicalDomain(x))
 	}
 	return out
 }

@@ -348,3 +348,16 @@ func TestSettleStaleClosesOnlyUsesThatWillNeverBeScored(t *testing.T) {
 		t.Fatalf("putaran kedua tidak boleh menutup apa pun, dapat %d", n)
 	}
 }
+
+func TestRecallCanonicalizesCallerDomains(t *testing.T) {
+	db := testDB(t)
+	web := mustLearn(t, db, Note{Title: "Tombol utama memakai warna aksen", Content: "Satu tombol utama per layar dengan warna aksen.", Domain: "web"})
+	mustLearn(t, db, Note{Title: "Widget tombol utama Flutter", Content: "Tombol utama Flutter memakai ElevatedButton.", Domain: "flutter"})
+	res := Recall(db, Query{Text: "tombol utama", Domains: []string{" Frontend "}})
+	if len(res.Domains) == 0 || res.Domains[0] != "web" {
+		t.Fatalf("domain pemanggil harus dipetakan ke web, dapat %v", res.Domains)
+	}
+	if len(res.Hits) != 1 || res.Hits[0].ID != web.ID {
+		t.Fatalf("hanya node web yang boleh lolos penyaringan ekosistem, dapat %+v", res.Hits)
+	}
+}
