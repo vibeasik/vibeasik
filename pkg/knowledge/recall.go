@@ -32,7 +32,7 @@ type Hit struct {
 	Score     float64 `json:"score"`
 	Relevance float64 `json:"relevance"`
 	UtilityV  float64 `json:"utility"`
-	Via       string  `json:"via,omitempty"` // "tautan" = ditemukan lewat tautan node lain (bukan kecocokan langsung)
+	Via       string  `json:"via,omitempty"` // "tautan" = ditemukan lewat tautan node lain (bukan kecocokan langsung); "coba" = slot coba (ViaTrial)
 }
 
 // Result: node terpilih, domain yang dikenali, dan ekosistem yang belum punya pengetahuan sama sekali.
@@ -95,6 +95,7 @@ func Recall(db *gorm.DB, q Query) Result {
 	}
 	ix := current(db)
 	res := rank(db, ix, q, DefaultRankWeights, time.Now(), nil)
+	explore(db, ix, q, &res, time.Now()) // slot coba (explore.go): paling banyak satu node tambahan di ujung daftar
 
 	if q.Context != "" {
 		if ix.n >= minGapCorpus {
@@ -343,6 +344,9 @@ func Lines(hits []Hit) string {
 		}
 		if h.AppliesTo != "" {
 			tag += " · berlaku " + h.AppliesTo
+		}
+		if h.Via == ViaTrial {
+			tag += " · coba"
 		}
 		fmt.Fprintf(&b, "- [%s] %s: %s", tag, h.Title, clip(h.Content, 320))
 		if h.Helpful+h.Harmful > 0 {
