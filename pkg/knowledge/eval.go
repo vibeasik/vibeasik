@@ -23,6 +23,12 @@ import (
 //
 // Evaluasi memakai fungsi peringkat yang sama dengan Recall (rank) tanpa efek samping: tidak mencatat pemakaian,
 // celah, atau apa pun. Node yang dibuat setelah todo dibuat tidak dihitung sebagai kandidat maupun label.
+//
+// Label hanya ada untuk node yang pernah ditampilkan peringkat lama, jadi peringkat baru yang mengangkat node yang
+// belum pernah dinilai tampak lebih buruk walau mungkin benar. Untuk itu dilaporkan juga nDCG terkondensasi
+// (dihitung hanya atas node yang punya penilaian di todo itu: pernah dipakai di konteks todo:<id> apa pun hasilnya,
+// atau disebut di baris PENGETAHUAN) dan porsi k teratas yang belum pernah dinilai. Todo dibagi deterministik
+// per id ke bagian latih (70 %) dan uji (30 %) agar penyetelan tidak diukur pada data yang sama.
 
 // EvalOptions mengatur satu putaran evaluasi.
 type EvalOptions struct {
@@ -37,6 +43,30 @@ type EvalOptions struct {
 	QueryFor func(models.Todo) Query
 	// MinScore: nilai QA minimal agar todo dianggap lulus untuk label kuat (bawaan 75 = ambang helpful Reward).
 	MinScore int
+	// Split: EvalSplitTrain / EvalSplitTest = hanya todo di bagian itu (EvalSplitOf); kosong = semua todo.
+	Split string
+	// PerQuery: sertakan metrik per todo (EvalTier.Queries) untuk perbandingan berpasangan antar varian.
+	PerQuery bool
+}
+
+// Bagian set uji.
+const (
+	EvalSplitTrain = "latih"
+	EvalSplitTest  = "uji"
+)
+
+// EvalSplitOf menempatkan todo ke bagian latih (±70 %) atau uji (±30 %) secara deterministik dari id-nya
+// (hash FNV-1a, jadi tidak bergantung urutan id maupun waktu).
+func EvalSplitOf(todoID uint) string {
+	h := uint32(2166136261)
+	for _, c := range []byte(strconv.FormatUint(uint64(todoID), 10)) {
+		h ^= uint32(c)
+		h *= 16777619
+	}
+	if h%10 < 7 {
+		return EvalSplitTrain
+	}
+	return EvalSplitTest
 }
 
 // EvalMetrics: rata-rata metrik atas kueri yang punya minimal satu label.
@@ -46,6 +76,23 @@ type EvalMetrics struct {
 	Recall  float64 `json:"recall_at_k"`
 	NDCG    float64 `json:"ndcg_at_k"`
 	MRR     float64 `json:"mrr_at_k"`
+	// CondNDCG: nDCG@k atas daftar yang hanya memuat node yang punya penilaian di todo itu.
+	CondNDCG float64 `json:"cond_ndcg_at_k"`
+	// Unjudged: porsi k teratas yang belum pernah dinilai di todo itu (0–1).
+	Unjudged float64 `json:"unjudged_at_k"`
+	// RecallList: recall atas seluruh daftar yang terkirim (bukan hanya k teratas).
+	RecallList float64 `json:"recall_list"`
+	// Delivered / Linked: rata-rata jumlah node terkirim per kueri, dan yang di antaranya tetangga bertaut.
+	Delivered float64 `json:"delivered"`
+	Linked    float64 `json:"linked"`
+}
+
+// EvalQuery: metrik satu todo pada satu tingkat label (hanya bila EvalOptions.PerQuery).
+type EvalQuery struct {
+	TodoID   uint    `json:"todo_id"`
+	Recall   float64 `json:"recall_at_k"`
+	NDCG     float64 `json:"ndcg_at_k"`
+	CondNDCG float64 `json:"cond_ndcg_at_k"`
 }
 
 // DomainMetrics: metrik per domain utama kueri (domain pertama hasil deteksi; "-" bila tidak terdeteksi).
@@ -62,6 +109,8 @@ type EvalTier struct {
 	// Label yang dibuang: node dibuat setelah todo (bocor), atau node tidak aktif/tidak dikenal saat ini.
 	DroppedLeak     int `json:"dropped_leak"`
 	DroppedInactive int `json:"dropped_inactive"`
+	// Queries: metrik per todo, urut id (hanya bila EvalOptions.PerQuery).
+	Queries []EvalQuery `json:"queries,omitempty"`
 }
 
 // EvalReport: hasil lengkap satu putaran evaluasi.
@@ -70,6 +119,7 @@ type EvalReport struct {
 	Limit   int         `json:"limit"`
 	Now     time.Time   `json:"now"`
 	Weights RankWeights `json:"weights"`
+	Split   string      `json:"split,omitempty"`
 	Nodes   int         `json:"nodes"` // node aktif di indeks
 	Todos   int         `json:"todos"` // todo yang diperingkat (punya label di salah satu tingkat)
 	Tiers   []EvalTier  `json:"tiers"`
@@ -144,6 +194,28 @@ func RankMetrics(ranked []uint, relevant map[uint]bool, k int) (recall, ndcg, rr
 	return float64(found) / float64(len(relevant)), dcg / idcg, rr
 }
 
+// CondensedNDCG: nDCG@k setelah daftar disaring ke node yang punya penilaian (judged), dan porsi k teratas daftar
+// asli yang belum dinilai.
+func CondensedNDCG(ranked []uint, judged, relevant map[uint]bool, k int) (ndcg, unjudged float64) {
+	cond := make([]uint, 0, len(ranked))
+	miss, n := 0, 0
+	for i, id := range ranked {
+		if judged[id] {
+			cond = append(cond, id)
+		} else if i < k {
+			miss++
+		}
+		if i < k {
+			n++
+		}
+	}
+	_, ndcg, _ = RankMetrics(cond, relevant, k)
+	if n > 0 {
+		unjudged = float64(miss) / float64(n)
+	}
+	return ndcg, unjudged
+}
+
 // Evaluate membangun set uji dari todo & pemakaian pengetahuan di db, lalu mengukur peringkat. Hanya membaca.
 func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 	if db == nil {
@@ -205,6 +277,30 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 		return nil, fmt.Errorf("membaca pemakaian: %w", err)
 	}
 	weak := map[uint][]uint{}
+	// Node yang pernah dinilai per todo: semua pemakaian di konteks todo:<id> (apa pun hasilnya) + label kuat.
+	var allUses []models.KnowledgeUse
+	if err := db.Select("node_id", "context").
+		Where("context LIKE ? AND created_at < ?", "todo:%", opt.Now).
+		Order("id").Find(&allUses).Error; err != nil {
+		return nil, fmt.Errorf("membaca pemakaian: %w", err)
+	}
+	judged := map[uint]map[uint]bool{}
+	mark := func(todo, node uint) {
+		if judged[todo] == nil {
+			judged[todo] = map[uint]bool{}
+		}
+		judged[todo][node] = true
+	}
+	for _, u := range allUses {
+		if id, err := strconv.ParseUint(strings.TrimPrefix(u.Context, "todo:"), 10, 32); err == nil && id > 0 {
+			mark(uint(id), u.NodeID)
+		}
+	}
+	for todo, ids := range strong {
+		for _, id := range ids {
+			mark(todo, id)
+		}
+	}
 	for _, u := range uses {
 		id, err := strconv.ParseUint(strings.TrimPrefix(u.Context, "todo:"), 10, 32)
 		if err != nil || id == 0 {
@@ -214,7 +310,7 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 	}
 
 	ix := current(db)
-	rep := &EvalReport{K: opt.K, Now: opt.Now, Weights: opt.Weights, Nodes: ix.n}
+	rep := &EvalReport{K: opt.K, Now: opt.Now, Weights: opt.Weights, Split: opt.Split, Nodes: ix.n}
 	type acc struct {
 		tier            EvalTier
 		total           EvalMetrics
@@ -230,6 +326,9 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 
 	for _, t := range todos {
 		if len(strong[t.ID]) == 0 && len(weak[t.ID]) == 0 {
+			continue
+		}
+		if opt.Split != "" && EvalSplitOf(t.ID) != opt.Split {
 			continue
 		}
 		cutoff := t.CreatedAt
@@ -270,8 +369,12 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 			return !ok || c.After(cutoff)
 		})
 		ranked := make([]uint, len(res.Hits))
+		linked := 0
 		for i, h := range res.Hits {
 			ranked[i] = h.ID
+			if h.Via != "" {
+				linked++
+			}
 		}
 		domain := "-"
 		if len(res.Domains) > 0 {
@@ -283,6 +386,11 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 				continue
 			}
 			r, n, rr := RankMetrics(ranked, rels[i], opt.K)
+			cn, un := CondensedNDCG(ranked, judged[t.ID], rels[i], opt.K)
+			rl, _, _ := RankMetrics(ranked, rels[i], len(ranked))
+			if opt.PerQuery {
+				a.tier.Queries = append(a.tier.Queries, EvalQuery{TodoID: t.ID, Recall: r, NDCG: n, CondNDCG: cn})
+			}
 			d := a.byDomain[domain]
 			if d == nil {
 				d = &EvalMetrics{}
@@ -294,6 +402,11 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 				m.Recall += r
 				m.NDCG += n
 				m.MRR += rr
+				m.CondNDCG += cn
+				m.Unjudged += un
+				m.RecallList += rl
+				m.Delivered += float64(len(ranked))
+				m.Linked += float64(linked)
 			}
 		}
 	}
@@ -325,5 +438,7 @@ func averaged(m EvalMetrics) EvalMetrics {
 	n := float64(m.Queries)
 	r4 := func(f float64) float64 { return math.Round(f/n*10000) / 10000 }
 	m.Recall, m.NDCG, m.MRR = r4(m.Recall), r4(m.NDCG), r4(m.MRR)
+	m.CondNDCG, m.Unjudged, m.RecallList = r4(m.CondNDCG), r4(m.Unjudged), r4(m.RecallList)
+	m.Delivered, m.Linked = r4(m.Delivered), r4(m.Linked)
 	return m
 }

@@ -160,6 +160,25 @@ func TestEvaluateDropsLeakedNodesAndWritesNothing(t *testing.T) {
 		t.Fatalf("Evaluate menulis ke database: uses %d→%d", usesBefore, usesAfter)
 	}
 
+	// Metrik terkondensasi: node yang dinilai (dipakai di todo atau disebut) saja; node lama teratas.
+	if m := strong.Total; m.CondNDCG != 1 || m.Unjudged != 0 || m.RecallList != 1 || m.Delivered < 1 {
+		t.Fatalf("metrik terkondensasi/anggaran = %+v", m)
+	}
+	if r, _ := Evaluate(db, EvalOptions{Now: opt.Now, PerQuery: true}); len(r.Tiers[0].Queries) != 1 || r.Tiers[0].Queries[0].TodoID != todo.ID || r.Tiers[0].Queries[0].NDCG != 1 {
+		t.Fatalf("metrik per todo = %+v", r.Tiers[0].Queries)
+	}
+	// Pembagian latih/uji: todo hanya muncul di bagiannya sendiri.
+	in, out := EvalSplitOf(todo.ID), EvalSplitTrain
+	if in == EvalSplitTrain {
+		out = EvalSplitTest
+	}
+	if r, _ := Evaluate(db, EvalOptions{Now: opt.Now, Split: in}); r.Tiers[0].Total.Queries != 1 || r.Split != in {
+		t.Fatalf("bagian %s: %+v", in, r.Tiers[0].Total)
+	}
+	if r, _ := Evaluate(db, EvalOptions{Now: opt.Now, Split: out}); r.Tiers[0].Total.Queries != 0 {
+		t.Fatalf("bagian %s memuat todo bagian lain: %+v", out, r.Tiers[0].Total)
+	}
+
 	// Deterministik: putaran kedua sama persis.
 	again, _ := Evaluate(db, opt)
 	if !reflect.DeepEqual(rep, again) {
@@ -169,5 +188,32 @@ func TestEvaluateDropsLeakedNodesAndWritesNothing(t *testing.T) {
 	// Todo yang dibuat setelah acuan waktu tidak ikut.
 	if r, _ := Evaluate(db, EvalOptions{Now: base}); r.Todos != 0 {
 		t.Fatalf("todo sesudah acuan waktu ikut dinilai: %d", r.Todos)
+	}
+}
+
+func TestCondensedNDCG(t *testing.T) {
+	// Daftar terkondensasi = [2, 4]; satu-satunya yang relevan (4) di posisi 2; 2 dari 4 teratas belum dinilai.
+	n, u := CondensedNDCG([]uint{1, 2, 3, 4}, map[uint]bool{2: true, 4: true}, map[uint]bool{4: true}, 4)
+	if !near(n, 1/math.Log2(3)) || !near(u, 0.5) {
+		t.Fatalf("CondensedNDCG = %v %v", n, u)
+	}
+	if n, u := CondensedNDCG(nil, nil, map[uint]bool{1: true}, 10); n != 0 || u != 0 {
+		t.Fatalf("daftar kosong = %v %v", n, u)
+	}
+}
+
+func TestEvalSplitOfIsStable(t *testing.T) {
+	train := 0
+	for id := uint(1); id <= 2000; id++ {
+		s := EvalSplitOf(id)
+		if s != EvalSplitOf(id) || s != EvalSplitTrain && s != EvalSplitTest {
+			t.Fatalf("bagian todo %d tidak stabil: %q", id, s)
+		}
+		if s == EvalSplitTrain {
+			train++
+		}
+	}
+	if train < 1300 || train > 1500 {
+		t.Fatalf("porsi latih %d/2000, mau ±70 %%", train)
 	}
 }
