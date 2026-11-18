@@ -701,12 +701,12 @@ text: {
       "category": "deployment",
       "severity": "WARNING",
       "title": "dev.sh Belum Ada di Root Proyek",
-      "description": "Proyek wajib punya dev.sh di root yang menyalakan semua komponen (BE, FE, mobile) dengan satu perintah, memakai port dari blok proyek di PORTS.md dan env FE→BE yang menunjuk port BE.",
-      "suggestion": "Buat dev.sh: set PORT tiap komponen dari blok PORTS.md, ekspor URL API BE ke FE/mobile, jalankan semua komponen paralel, dan hentikan semuanya dengan trap saat Ctrl+C.",
+      "description": "Proyek wajib punya dev.sh di root yang menyalakan semua komponen (BE, FE, mobile) dengan satu perintah, memakai port dari blok proyek di PORTS.md, env FE→BE yang menunjuk port BE, dan listen di 0.0.0.0 agar bisa dibuka dari LAN.",
+      "suggestion": "Buat dev.sh: set PORT tiap komponen dari blok PORTS.md, jalankan BE \u0026 FE dengan HOST=0.0.0.0, ekspor URL API BE (IP LAN) ke FE/mobile dan CORS_ORIGIN ke BE, cetak URL LAN, jalankan semua komponen paralel, dan hentikan semuanya dengan trap saat Ctrl+C.",
       "target_file": "dev.sh",
       "rule_id": "DEV-SCRIPT-MISSING",
       "theory_basis": "ARCH-002 Unified Local Orchestration (Dev Runner).",
-      "suggested_fix": "#!/usr/bin/env bash\n# Jalankan semua komponen proyek sekaligus. Port dari blok PORTS.md (Aturan 35).\nset -e\nROOT=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" \u0026\u0026 pwd)\"\nBE_PORT=\"${BE_PORT:-4105}\"; FE_PORT=\"${FE_PORT:-4100}\"\nLAN_IP=\"$(hostname -I 2\u003e/dev/null | awk '{print $1}')\"; LAN_IP=\"${LAN_IP:-127.0.0.1}\"\ntrap 'kill 0' EXIT INT TERM\n(cd \"$ROOT/backend\" \u0026\u0026 PORT=$BE_PORT go run .) \u0026\n(cd \"$ROOT/frontend\" \u0026\u0026 PORT=$FE_PORT NUXT_PUBLIC_API_BASE=http://localhost:$BE_PORT bun run dev) \u0026\n# (cd \"$ROOT/mobile\" \u0026\u0026 flutter run --dart-define=API_BASE_URL=http://$LAN_IP:$BE_PORT) \u0026\nwait",
+      "suggested_fix": "#!/usr/bin/env bash\n# Jalankan semua komponen proyek sekaligus di 0.0.0.0 (LAN, NET-002). Port dari blok PORTS.md (Aturan 35).\nset -e\nROOT=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" \u0026\u0026 pwd)\"\nBE_PORT=\"${BE_PORT:-4105}\"; FE_PORT=\"${FE_PORT:-4100}\"\nLAN_IP=\"$(hostname -I 2\u003e/dev/null | awk '{print $1}')\"; LAN_IP=\"${LAN_IP:-127.0.0.1}\"\ntrap 'kill 0' EXIT INT TERM\n(cd \"$ROOT/backend\" \u0026\u0026 HOST=0.0.0.0 PORT=$BE_PORT CORS_ORIGIN=\"http://localhost:$FE_PORT,http://$LAN_IP:$FE_PORT\" go run .) \u0026\n(cd \"$ROOT/frontend\" \u0026\u0026 HOST=0.0.0.0 PORT=$FE_PORT NUXT_PUBLIC_API_BASE=http://$LAN_IP:$BE_PORT bun run dev) \u0026\n# (cd \"$ROOT/mobile\" \u0026\u0026 flutter run --dart-define=API_BASE_URL=http://$LAN_IP:$BE_PORT) \u0026\necho \"Lokal: http://localhost:$FE_PORT  LAN: http://$LAN_IP:$FE_PORT\"; wait",
       "status": "open"
     },
     {

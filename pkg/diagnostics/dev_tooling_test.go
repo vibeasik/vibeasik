@@ -218,3 +218,128 @@ func TestInspectMobileDevScript(t *testing.T) {
 		t.Errorf("project without Flutter must not need dev-mobile.sh, got %s", toolRuleIDs(fs))
 	}
 }
+
+func TestDevLANAccess(t *testing.T) {
+	httpComps := []models.Component{
+		{Name: "api", Role: models.RoleBackend, RelativePath: "backend"},
+		{Name: "web", Role: models.RoleFrontendClient, RelativePath: "frontend"},
+	}
+	cases := []struct {
+		name  string
+		comps []models.Component
+		files map[string]string // dev.sh tidak ditulis bila kuncinya tidak ada
+		want  string
+	}{
+		{"no dev.sh", httpComps, map[string]string{"backend/.env": "HOST=127.0.0.1\n"}, ""},
+		{"dev.sh without marker", httpComps, map[string]string{"dev.sh": "cd backend && go run . &\ncd frontend && bun run dev\n"}, "DEV-LAN-NOT-ACCESSIBLE"},
+		{"marker only in comment", httpComps, map[string]string{"dev.sh": "# HOST=0.0.0.0 --host\ncd backend && go run .\n"}, "DEV-LAN-NOT-ACCESSIBLE"},
+		{"HOST=0.0.0.0", httpComps, map[string]string{"dev.sh": "HOST=0.0.0.0 go run ./backend\n"}, ""},
+		{"vite --host without value", httpComps, map[string]string{"dev.sh": "cd frontend && bunx vite --host\n"}, ""},
+		{"--host loopback is not LAN", httpComps, map[string]string{"dev.sh": "cd frontend && nuxt dev --host 127.0.0.1\n"}, "DEV-LAN-NOT-ACCESSIBLE"},
+		{"curl -H is not a host flag", httpComps, map[string]string{"dev.sh": "curl -H 'X-A: 1' http://x\n"}, "DEV-LAN-NOT-ACCESSIBLE"},
+		{"next -H 0.0.0.0", httpComps, map[string]string{"dev.sh": "cd frontend && next dev -H 0.0.0.0\n"}, ""},
+		{"IPv6 any", httpComps, map[string]string{"dev.sh": "BIND_ADDR=[::]:4105 go run ./backend\n"}, ""},
+		{"only mobile and cli", []models.Component{
+			{Name: "app", Role: models.RoleFrontendMobile, RelativePath: "mobile", Language: "dart"},
+			{Name: "tool", Role: models.RoleCLI, RelativePath: "cli"},
+		}, map[string]string{"dev.sh": "cd mobile && flutter run\n", "mobile/.env": "HOST=127.0.0.1\n", "cli/.env": "HOST=localhost\n"}, ""},
+		{"component folder missing", httpComps[:1], map[string]string{"dev.sh": "go run .\n"}, ""},
+		{"all components bind LAN in config", httpComps, map[string]string{
+			"dev.sh":                  "cd backend && go run . &\ncd frontend && bun run dev\n",
+			"frontend/nuxt.config.ts": "export default defineNuxtConfig({ devServer: { host: '0.0.0.0' } })\n",
+			"backend/package.json":    `{"scripts":{"dev":"node server.js --host 0.0.0.0"}}`,
+		}, ""},
+		{"one component still loopback-only", httpComps, map[string]string{
+			"dev.sh":                  "cd backend && go run . &\ncd frontend && bun run dev\n",
+			"frontend/vite.config.ts": "export default { server: { host: true } }\n",
+		}, "DEV-LAN-NOT-ACCESSIBLE"},
+		{"env loopback not overridden", httpComps, map[string]string{
+			"dev.sh":              "cd frontend && bunx vite --host\n",
+			"backend/.env":        "DB_PASSWORD=rahasia\nHOST=127.0.0.1\n",
+			"frontend/.env.local": "NUXT_HOST=\"localhost\"\n",
+		}, "DEV-LAN-HOST-LOOPBACK,DEV-LAN-HOST-LOOPBACK"},
+		{"env loopback overridden by dev.sh", httpComps, map[string]string{
+			"dev.sh":              "export HOST=0.0.0.0\n(cd frontend && NUXT_HOST=\"0.0.0.0\" bun run dev)\n",
+			"backend/.env":        "HOST=127.0.0.1\n",
+			"frontend/.env.local": "NUXT_HOST=localhost\n",
+		}, ""},
+		{"override only in comment", httpComps, map[string]string{
+			"dev.sh":       "# HOST=0.0.0.0\ncd frontend && bunx vite --host\n",
+			"backend/.env": "LISTEN_ADDR=127.0.0.1:4105\n",
+		}, "DEV-LAN-HOST-LOOPBACK"},
+		{"override to ::1 is not LAN", httpComps, map[string]string{
+			"dev.sh":       "HOST=::1 go run ./backend --host\n",
+			"backend/.env": "HOST=::1\n",
+		}, "DEV-LAN-HOST-LOOPBACK"},
+		{"env already LAN", httpComps, map[string]string{
+			"dev.sh":       "HOST=0.0.0.0 go run ./backend\n",
+			"backend/.env": "HOST=0.0.0.0\nAPI_HOST=localhost\n",
+		}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, c := range tc.comps {
+				os.MkdirAll(filepath.Join(root, c.RelativePath), 0o755)
+			}
+			if tc.name == "component folder missing" {
+				os.RemoveAll(filepath.Join(root, "backend"))
+			}
+			for rel, body := range tc.files {
+				os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)
+				os.WriteFile(filepath.Join(root, rel), []byte(body), 0o755)
+			}
+			p := &models.Project{RootPath: root, Components: tc.comps}
+			fs := inspectDevLANAccess(p)
+			if got := toolRuleIDs(fs); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+			for _, f := range fs {
+				if f.RuleID != "DEV-LAN-HOST-LOOPBACK" {
+					continue
+				}
+				if f.Line == 0 || f.SuggestedFix == "" || strings.Contains(f.Snippet, "rahasia") || strings.Count(f.Snippet, "=") != 1 {
+					t.Errorf("bad loopback finding: %+v", f)
+				}
+				if !strings.HasPrefix(f.TargetFile, "backend/") && !strings.HasPrefix(f.TargetFile, "frontend/") {
+					t.Errorf("TargetFile must be relative to project: %s", f.TargetFile)
+				}
+			}
+		})
+	}
+}
+
+func TestDevLANLoopbackFindingFields(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "backend"), 0o755)
+	os.WriteFile(filepath.Join(root, "dev.sh"), []byte("go run ./backend --host\n"), 0o755)
+	os.WriteFile(filepath.Join(root, "backend", ".env"), []byte("DB_PASSWORD=rahasia\nexport HOST='127.0.0.1'\n"), 0o644)
+	p := &models.Project{RootPath: root, Components: []models.Component{{Name: "api", Role: models.RoleBackend, RelativePath: "backend"}}}
+	fs := inspectDevLANAccess(p)
+	if len(fs) != 1 {
+		t.Fatalf("want one finding, got %+v", fs)
+	}
+	f := fs[0]
+	if f.TargetFile != "backend/.env" || f.Line != 2 || f.Snippet != "HOST='127.0.0.1'" || f.SuggestedFix != "HOST=0.0.0.0" || !strings.HasPrefix(f.TheoryBasis, "NET-002") {
+		t.Fatalf("unexpected finding fields: %+v", f)
+	}
+}
+
+func TestDevScriptTemplateLAN(t *testing.T) {
+	for _, want := range []string{"HOST=0.0.0.0 PORT=$BE_PORT", "HOST=0.0.0.0 PORT=$FE_PORT", `CORS_ORIGIN="http://localhost:$FE_PORT,http://$LAN_IP:$FE_PORT"`, `LAN: http://$LAN_IP:$FE_PORT"`, "NUXT_PUBLIC_API_BASE=http://$LAN_IP:$BE_PORT"} {
+		if !strings.Contains(devScriptTemplate, want) {
+			t.Errorf("dev.sh template missing %q", want)
+		}
+	}
+	if strings.Contains(devScriptTemplate, "NUXT_PUBLIC_API_BASE=http://localhost") {
+		t.Error("dev.sh template must not lock the browser API URL to localhost")
+	}
+	path := filepath.Join(t.TempDir(), "dev.sh")
+	os.WriteFile(path, []byte(devScriptTemplate), 0o755)
+	if out, err := exec.Command("bash", "-n", path).CombinedOutput(); err != nil {
+		t.Fatalf("dev.sh template is not valid bash: %v\n%s", err, out)
+	}
+	if !hasLANBindMarker(shellCode(devScriptTemplate)) {
+		t.Error("dev.sh template must satisfy DEV-LAN-NOT-ACCESSIBLE")
+	}
+}

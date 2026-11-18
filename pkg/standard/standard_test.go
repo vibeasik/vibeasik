@@ -78,7 +78,7 @@ func TestEnsureLifecycle(t *testing.T) {
 	}
 
 	// Standar lengkap → todo gabungan pending ditutup otomatis
-	devsh := "#!/usr/bin/env bash\ntrap 'kill 0' EXIT\n(cd backend && PORT=4105 go run .) &\nwait\n"
+	devsh := "#!/usr/bin/env bash\ntrap 'kill 0' EXIT\n(cd backend && HOST=0.0.0.0 PORT=4105 go run .) &\nwait\n"
 	deploysh := "#!/usr/bin/env bash\nT=${1:-server}\ntrap 'cp backend/.env.local backend/.env' EXIT\ncp \"backend/.env.$T\" backend/.env\n"
 	os.WriteFile(filepath.Join(root, "dev.sh"), []byte(devsh), 0o755)
 	os.WriteFile(filepath.Join(root, "deploy.sh"), []byte(deploysh), 0o755)

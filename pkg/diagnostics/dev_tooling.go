@@ -43,6 +43,7 @@ func inspectProjectTooling(project *models.Project) []models.Finding {
 	}
 	var findings []models.Finding
 	findings = append(findings, inspectDevScript(project)...)
+	findings = append(findings, inspectDevLANAccess(project)...)
 	findings = append(findings, inspectMobileDevScript(project)...)
 	findings = append(findings, inspectDeployScript(project)...)
 	return findings
@@ -57,8 +58,8 @@ func inspectDevScript(project *models.Project) []models.Finding {
 			Severity:     "WARNING",
 			RuleID:       "DEV-SCRIPT-MISSING",
 			Title:        "dev.sh Belum Ada di Root Proyek",
-			Description:  "Proyek wajib punya dev.sh di root yang menyalakan semua komponen (BE, FE, mobile) dengan satu perintah, memakai port dari blok proyek di PORTS.md dan env FE→BE yang menunjuk port BE.",
-			Suggestion:   "Buat dev.sh: set PORT tiap komponen dari blok PORTS.md, ekspor URL API BE ke FE/mobile, jalankan semua komponen paralel, dan hentikan semuanya dengan trap saat Ctrl+C.",
+			Description:  "Proyek wajib punya dev.sh di root yang menyalakan semua komponen (BE, FE, mobile) dengan satu perintah, memakai port dari blok proyek di PORTS.md, env FE→BE yang menunjuk port BE, dan listen di 0.0.0.0 agar bisa dibuka dari LAN.",
+			Suggestion:   "Buat dev.sh: set PORT tiap komponen dari blok PORTS.md, jalankan BE & FE dengan HOST=0.0.0.0, ekspor URL API BE (IP LAN) ke FE/mobile dan CORS_ORIGIN ke BE, cetak URL LAN, jalankan semua komponen paralel, dan hentikan semuanya dengan trap saat Ctrl+C.",
 			TargetFile:   "dev.sh",
 			TheoryBasis:  "ARCH-002 Unified Local Orchestration (Dev Runner).",
 			SuggestedFix: devScriptTemplate,
@@ -104,6 +105,188 @@ func findMissingDevComponents(components []models.Component, content string) []s
 		}
 	}
 	return missing
+}
+
+// isHTTPComponent: komponen yang melayani HTTP saat dev (backend atau frontend web). Mobile, CLI, docs, dan
+// library dilewati karena tidak membuka port yang dibuka peramban.
+func isHTTPComponent(c models.Component) bool {
+	if isMobileComponent(c) {
+		return false
+	}
+	return c.Role == models.RoleBackend || strings.HasPrefix(c.Role, "frontend")
+}
+
+// componentDir: folder komponen di disk, atau "" bila tidak bisa ditentukan / tidak ada.
+func componentDir(project *models.Project, c models.Component) string {
+	dir := c.AbsolutePath
+	if dir == "" {
+		rel := strings.Trim(filepath.ToSlash(c.RelativePath), "/")
+		if rel == "" || rel == "." {
+			return ""
+		}
+		dir = filepath.Join(project.RootPath, rel)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return ""
+	}
+	return dir
+}
+
+// shellCode: isi skrip tanpa baris komentar penuh (# ...), termasuk shebang.
+func shellCode(content string) string {
+	var out []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+var (
+	// alamat semua-antarmuka: 0.0.0.0 atau [::] (bukan [::1])
+	lanAddrRe = regexp.MustCompile(`0\.0\.0\.0|\[::\]`)
+	// flag host CLI dev server (Nuxt/Vite --host, Next --hostname) beserta nilainya bila ada; Next -H hanya
+	// dihitung bersama 0.0.0.0 (lanAddrRe) karena -H juga dipakai perintah lain (mis. curl -H header)
+	hostFlagRe = regexp.MustCompile(`--host(?:name)?\b(?:[ =]+([^\s;&|)]+))?`)
+	// host: true / host: '0.0.0.0' / host: '::' di nuxt.config / vite.config (devServer atau server)
+	configLANHostRe = regexp.MustCompile(`\bhost\s*:\s*(?:true\b|['"](?:0\.0\.0\.0|::)['"])`)
+	loopbackHostRe  = regexp.MustCompile(`^["']?(?:127\.0\.0\.1|localhost|::1|\[::1\])(?::\d+)?["']?$`)
+)
+
+// hasLANBindMarker: kode shell/skrip memuat tanda bind LAN: 0.0.0.0, [::], atau flag --host/--hostname yang
+// tidak diarahkan ke loopback (Vite: --host tanpa nilai = semua antarmuka).
+func hasLANBindMarker(code string) bool {
+	if lanAddrRe.MatchString(code) {
+		return true
+	}
+	for _, m := range hostFlagRe.FindAllStringSubmatch(code, -1) {
+		if m[1] == "" || !loopbackHostRe.MatchString(m[1]) {
+			return true
+		}
+	}
+	return false
+}
+
+// componentBindsLAN: konfigurasi dev komponen sendiri jelas bind LAN, sehingga dev.sh tidak perlu menimpanya.
+// Keterbatasan: yang dibaca hanya nuxt.config.*, vite.config.*, dan skrip "dev" package.json. Bind di kode
+// (mis. Go http.ListenAndServe(":"+port), yang sebenarnya semua antarmuka) tidak dikenali, jadi backend tetap
+// dianggap belum terbukti LAN sampai dev.sh menyatakan HOST=0.0.0.0.
+func componentBindsLAN(dir string) bool {
+	for _, name := range []string{"nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs", "vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.mts"} {
+		if configLANHostRe.MatchString(readSmallFile(filepath.Join(dir, name))) {
+			return true
+		}
+	}
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if json.Unmarshal([]byte(readSmallFile(filepath.Join(dir, "package.json"))), &pkg) == nil {
+		if dev, ok := pkg.Scripts["dev"]; ok && hasLANBindMarker(" "+dev) {
+			return true
+		}
+	}
+	return false
+}
+
+// devScriptCode: isi dev.sh tanpa komentar, ok=false bila dev.sh tidak ada (sudah dilaporkan DEV-SCRIPT-MISSING).
+func devScriptCode(project *models.Project) (string, bool) {
+	path := filepath.Join(project.RootPath, "dev.sh")
+	if !util.FileExists(path) {
+		return "", false
+	}
+	return shellCode(readSmallFile(path)), true
+}
+
+// inspectDevLANAccess (NET-002): semua komponen HTTP wajib bisa dibuka dari LAN saat dev.
+func inspectDevLANAccess(project *models.Project) []models.Finding {
+	code, ok := devScriptCode(project)
+	if !ok {
+		return nil
+	}
+	var httpComps []models.Component
+	var dirs []string
+	for _, c := range project.Components {
+		if !isHTTPComponent(c) {
+			continue
+		}
+		if dir := componentDir(project, c); dir != "" {
+			httpComps = append(httpComps, c)
+			dirs = append(dirs, dir)
+		}
+	}
+	if len(httpComps) == 0 {
+		return nil
+	}
+	var findings []models.Finding
+	if !hasLANBindMarker(code) {
+		var notLAN []string
+		for i, c := range httpComps {
+			if !componentBindsLAN(dirs[i]) {
+				notLAN = append(notLAN, fmt.Sprintf("%s (%s)", c.Name, strings.Trim(filepath.ToSlash(c.RelativePath), "/")))
+			}
+		}
+		if len(notLAN) > 0 {
+			findings = append(findings, models.Finding{
+				Category:     "deployment",
+				Severity:     "WARNING",
+				RuleID:       "DEV-LAN-NOT-ACCESSIBLE",
+				Title:        "Komponen Proyek Tidak Bisa Diakses dari LAN saat Dev",
+				Description:  fmt.Sprintf("dev.sh tidak menjalankan komponen HTTP di 0.0.0.0 (tidak ada HOST=0.0.0.0, --host, atau -H 0.0.0.0), dan konfigurasi dev komponen berikut juga tidak bind LAN: %s. Akibatnya proyek tidak bisa dibuka dari HP atau komputer lain lewat http://<IP-LAN>:<port>.", strings.Join(notLAN, ", ")),
+				Suggestion:   "Jalankan BE & FE di dev.sh dengan HOST=0.0.0.0 (Nuxt/Vite: --host 0.0.0.0, Next: -H 0.0.0.0), arahkan URL API FE ke http://$LAN_IP:$BE_PORT, beri BE CORS_ORIGIN yang memuat http://$LAN_IP:$FE_PORT (tanpa *), dan cetak URL LAN-nya. Hanya untuk dev; produksi tetap bind loopback di belakang reverse proxy.",
+				TargetFile:   "dev.sh",
+				TheoryBasis:  "NET-002 Semua Komponen Wajib Bisa Diakses dari LAN saat Development.",
+				SuggestedFix: "LAN_IP=\"$(hostname -I 2>/dev/null | awk '{print $1}')\"; LAN_IP=\"${LAN_IP:-127.0.0.1}\"\n(cd \"$ROOT/backend\" && HOST=0.0.0.0 PORT=$BE_PORT CORS_ORIGIN=\"http://localhost:$FE_PORT,http://$LAN_IP:$FE_PORT\" go run .) &\n(cd \"$ROOT/frontend\" && HOST=0.0.0.0 PORT=$FE_PORT NUXT_PUBLIC_API_BASE=http://$LAN_IP:$BE_PORT bun run dev) &\necho \"LAN: http://$LAN_IP:$FE_PORT\"",
+			})
+		}
+	}
+	for i, c := range httpComps {
+		findings = append(findings, inspectLoopbackHostEnv(c, dirs[i], code)...)
+	}
+	return findings
+}
+
+// envHostLineRe: kunci host bind di env dev bernilai loopback. Grup 1 = kunci, grup 2 = nilai.
+var envHostLineRe = regexp.MustCompile(`^(?:export\s+)?(HOST|NUXT_HOST|NITRO_HOST|HOSTNAME|BIND_ADDR|LISTEN_ADDR)\s*=\s*(["']?(?:127\.0\.0\.1|localhost|::1|\[::1\])(?::\d+)?["']?)\s*$`)
+
+// devScriptOverridesHost: dev.sh menimpa kunci host itu dengan 0.0.0.0 / [::] (KEY=0.0.0.0, KEY="0.0.0.0").
+func devScriptOverridesHost(code, key string) bool {
+	re := regexp.MustCompile(`(?m)(?:^|[\s;(&|])` + regexp.QuoteMeta(key) + `=["']?(?:0\.0\.0\.0|\[::\]|::(?:[^0-9a-fA-F:]|$))`)
+	return re.MatchString(code)
+}
+
+// inspectLoopbackHostEnv: env dev komponen mengunci bind ke loopback dan dev.sh tidak menimpanya.
+// Snippet hanya memuat kunci=nilai baris itu, tidak pernah baris env lain.
+func inspectLoopbackHostEnv(c models.Component, dir, devCode string) []models.Finding {
+	var findings []models.Finding
+	for _, envName := range []string{".env.local", ".env", ".env.development"} {
+		content := readSmallFile(filepath.Join(dir, envName))
+		if content == "" {
+			continue
+		}
+		rel := filepath.ToSlash(filepath.Join(c.RelativePath, envName))
+		for i, line := range strings.Split(content, "\n") {
+			m := envHostLineRe.FindStringSubmatch(strings.TrimSpace(line))
+			if m == nil || devScriptOverridesHost(devCode, m[1]) {
+				continue
+			}
+			findings = append(findings, models.Finding{
+				Category:     "deployment",
+				Severity:     "WARNING",
+				RuleID:       "DEV-LAN-HOST-LOOPBACK",
+				Title:        fmt.Sprintf("Host Dev '%s' Terkunci ke Loopback", c.Name),
+				Description:  fmt.Sprintf("%s di %s membuat '%s' hanya listen di loopback, dan dev.sh tidak menimpanya dengan 0.0.0.0. Komponen tidak bisa dibuka dari HP atau komputer lain di jaringan yang sama.", m[1], rel, c.Name),
+				Suggestion:   fmt.Sprintf("Ubah %s menjadi 0.0.0.0 di env dev, atau jalankan komponen dari dev.sh dengan %s=0.0.0.0. Produksi tetap bind loopback lewat .env.server.", m[1], m[1]),
+				TargetFile:   rel,
+				Line:         i + 1,
+				Snippet:      m[1] + "=" + m[2],
+				TheoryBasis:  "NET-002 Semua Komponen Wajib Bisa Diakses dari LAN saat Development.",
+				SuggestedFix: m[1] + "=0.0.0.0",
+			})
+		}
+	}
+	return findings
 }
 
 // deployEnvOnServerRe: penanda eksplisit di deploy.sh bahwa env produksi dibaca di server, bukan disalin dari laptop.
@@ -680,16 +863,16 @@ func camelFromFile(name string) string {
 }
 
 const devScriptTemplate = `#!/usr/bin/env bash
-# Jalankan semua komponen proyek sekaligus. Port dari blok PORTS.md (Aturan 35).
+# Jalankan semua komponen proyek sekaligus di 0.0.0.0 (LAN, NET-002). Port dari blok PORTS.md (Aturan 35).
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BE_PORT="${BE_PORT:-4105}"; FE_PORT="${FE_PORT:-4100}"
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"; LAN_IP="${LAN_IP:-127.0.0.1}"
 trap 'kill 0' EXIT INT TERM
-(cd "$ROOT/backend" && PORT=$BE_PORT go run .) &
-(cd "$ROOT/frontend" && PORT=$FE_PORT NUXT_PUBLIC_API_BASE=http://localhost:$BE_PORT bun run dev) &
+(cd "$ROOT/backend" && HOST=0.0.0.0 PORT=$BE_PORT CORS_ORIGIN="http://localhost:$FE_PORT,http://$LAN_IP:$FE_PORT" go run .) &
+(cd "$ROOT/frontend" && HOST=0.0.0.0 PORT=$FE_PORT NUXT_PUBLIC_API_BASE=http://$LAN_IP:$BE_PORT bun run dev) &
 # (cd "$ROOT/mobile" && flutter run --dart-define=API_BASE_URL=http://$LAN_IP:$BE_PORT) &
-wait`
+echo "Lokal: http://localhost:$FE_PORT  LAN: http://$LAN_IP:$FE_PORT"; wait`
 
 const deployScriptTemplate = `#!/usr/bin/env bash
 # ./deploy.sh [nama-env]  → pakai .env.<nama-env> (default: server), lalu kembali ke .env.local.

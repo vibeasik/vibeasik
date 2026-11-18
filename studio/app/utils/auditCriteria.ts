@@ -773,7 +773,22 @@ export const AUDIT_CRITERIA: AuditCriterion[] = [
     suggested_action: 'Buat dev.sh: PORT per komponen, ekspor URL API, jalankan dengan & lalu wait, trap \'kill 0\' EXIT.',
     example_code: {
       bad: '# README: buka 3 terminal, jalankan go run . lalu bun dev',
-      good: 'trap \'kill 0\' EXIT\n(cd backend && PORT=4105 go run .) &\n(cd frontend && PORT=4100 NUXT_PUBLIC_API_BASE=http://localhost:4105 bun run dev) &\nwait'
+      good: 'trap \'kill 0\' EXIT\n(cd backend && HOST=0.0.0.0 PORT=4105 CORS_ORIGIN="http://localhost:4100,http://$LAN_IP:4100" go run .) &\n(cd frontend && HOST=0.0.0.0 PORT=4100 NUXT_PUBLIC_API_BASE=http://$LAN_IP:4105 bun run dev) &\necho "LAN: http://$LAN_IP:4100"\nwait'
+    }
+  },
+  {
+    id: 'DEV-LAN-NOT-ACCESSIBLE',
+    category: 'deployment',
+    title: 'Semua Komponen Wajib Bisa Diakses dari LAN saat Dev',
+    scope: 'Universal',
+    severity: 'warning',
+    rule: 'Saat dev, komponen HTTP (BE, FE web) listen di 0.0.0.0 agar bisa dibuka dari HP/komputer lain lewat http://<IP-LAN>:<port>; URL API peramban tidak terkunci ke localhost; CORS BE memuat origin LAN FE (tanpa *); dev.sh mencetak URL LAN. Produksi tetap bind loopback di belakang reverse proxy (NET-002).',
+    rationale: 'Tampilan bisa diuji di HP fisik, proyek bisa didemokan di jaringan yang sama, dan aplikasi mobile bisa memanggil BE di laptop dev.',
+    inspection_check: 'DEV-LAN-NOT-ACCESSIBLE (dev.sh ada tetapi tanpa HOST=0.0.0.0 / --host / -H 0.0.0.0 / [::], dan konfigurasi dev komponen tidak bind LAN) dan DEV-LAN-HOST-LOOPBACK (HOST/NUXT_HOST/NITRO_HOST/HOSTNAME/BIND_ADDR/LISTEN_ADDR di env dev bernilai loopback, tidak ditimpa dev.sh).',
+    suggested_action: 'Jalankan BE & FE dari dev.sh dengan HOST=0.0.0.0, URL API http://$LAN_IP:$BE_PORT, CORS_ORIGIN memuat http://$LAN_IP:$FE_PORT, lalu echo URL LAN.',
+    example_code: {
+      bad: 'HOST=127.0.0.1  # .env dev: hanya bisa dibuka dari laptop sendiri',
+      good: '(cd frontend && HOST=0.0.0.0 PORT=$FE_PORT bun run dev) &\necho "LAN: http://$LAN_IP:$FE_PORT"'
     }
   },
   {

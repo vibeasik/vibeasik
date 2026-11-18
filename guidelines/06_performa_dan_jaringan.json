@@ -15,13 +15,13 @@
     },
     {
       "id": "NET-002",
-      "level": "global",
-      "title": "All-Interface LAN Binding (0.0.0.0)",
-      "rule": "Service daemon lokal yang dimaksudkan untuk kolaborasi tim atau akses mobile di LAN wajib melakukan binding ke 0.0.0.0 bukan hanya 127.0.0.1.",
-      "rationale": "Memungkinkan testing responsif dari HP fisik di jaringan WiFi yang sama dan integrasi AI remote dari komputer lain.",
-      "inspection_check": "Periksa file .env apakah HOST=0.0.0.0.",
-      "suggested_action": "Set HOST=0.0.0.0 pada file .env local-engine dan studio-frontend.",
-      "severity": "medium"
+      "level": "project",
+      "title": "Semua Komponen Wajib Bisa Diakses dari LAN saat Development",
+      "rule": "Saat development, setiap komponen proyek yang melayani HTTP (backend, frontend web, worker ber-HTTP) wajib listen di 0.0.0.0, bukan hanya 127.0.0.1, sehingga bisa dibuka dari HP atau komputer lain di jaringan yang sama lewat http://<IP-LAN>:<port>. URL API yang dipakai peramban tidak boleh terkunci ke localhost: ikuti host halaman, pakai IP LAN dari dev.sh, atau lewat proxy same-origin. CORS backend mengizinkan origin LAN frontend secara eksplisit (tanpa wildcard *, selaras SEC-005). dev.sh mencetak URL LAN. Aturan ini hanya untuk development: produksi tetap bind loopback di belakang reverse proxy. Pengecualian: engine vibeasik sendiri tetap bind 127.0.0.1 dengan token lokal; akses LAN ke engine lewat 'vibeasik lan'.",
+      "rationale": "Tampilan responsif bisa diuji langsung di HP fisik, proyek bisa didemokan ke rekan di jaringan yang sama, dan aplikasi mobile serta perangkat uji bisa memanggil BE yang berjalan di laptop dev.",
+      "inspection_check": "Audit DEV-LAN-NOT-ACCESSIBLE (proyek punya komponen HTTP, dev.sh ada, tetapi dev.sh tidak memuat HOST=0.0.0.0 / --host / -H 0.0.0.0 / [::] dan konfigurasi dev komponen tidak bind LAN) dan DEV-LAN-HOST-LOOPBACK (HOST/NUXT_HOST/NITRO_HOST/HOSTNAME/BIND_ADDR/LISTEN_ADDR di .env.local/.env/.env.development bernilai 127.0.0.1/localhost/::1 dan tidak ditimpa dev.sh).",
+      "suggested_action": "Di dev.sh jalankan BE dan FE dengan HOST=0.0.0.0 (Nuxt/Vite: --host 0.0.0.0, Next: -H 0.0.0.0), isi URL API FE dengan http://$LAN_IP:$BE_PORT, beri BE CORS_ORIGIN=\"http://localhost:$FE_PORT,http://$LAN_IP:$FE_PORT\", dan cetak echo \"LAN: http://$LAN_IP:$FE_PORT\". Hapus HOST=127.0.0.1 dari env dev; host loopback hanya di .env.server produksi.",
+      "severity": "high"
     },
     {
       "id": "NET-003",

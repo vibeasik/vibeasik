@@ -159,20 +159,20 @@ func GenerateGlobalSuggestions(allProjects []models.Project) []models.Todo {
 		Source:         "ai_agent",
 	})
 
-	// NET-002: Local Subdomain / Traefik Reverse Proxy - Category: Performance
+	// NET-002: Semua komponen bisa diakses dari LAN saat development - Category: Performance
 	suggestions = append(suggestions, models.Todo{
 		Level:          models.TodoLevelGlobal,
 		Category:       models.CategoryPerformance,
-		TargetApps:     "Global Network (Reverse Proxy Traefik/Caddy)",
-		Title:          "Setup Reverse Proxy Lokal untuk DNS Subdomain Proyek (*.localhost)",
-		Description:    "Konfigurasikan Traefik atau Caddy lokal untuk memetakan domain lokal (misal: app.localhost, api.localhost) ke port internal masing-masing servis.",
+		TargetApps:     "Semua proyek (dev.sh)",
+		Title:          "Jalankan Semua Komponen Proyek di 0.0.0.0 saat Development",
+		Description:    "Pastikan dev.sh setiap proyek menjalankan BE dan FE dengan HOST=0.0.0.0, URL API FE memakai IP LAN (bukan localhost), CORS BE memuat origin LAN FE, dan URL LAN dicetak, agar proyek bisa dibuka dari HP atau komputer lain di jaringan yang sama.",
 		Status:         models.TodoStatusSuggested,
 		Priority:       models.TodoPriorityMedium,
 		CreatorType:    models.CreatorAI,
 		CreatorName:    "vibeasik-ai-advisor",
 		IsAISuggestion: true,
 		GuidelineRef:   "NET-002",
-		Rationale:      "Patokan: [NET-002] Menghilangkan konflik nomor port statis secara permanen di tingkat jaringan lokal dan menyederhanakan akses multi-bundle.",
+		Rationale:      "Patokan: [NET-002] Tampilan bisa diuji di HP fisik, proyek bisa didemokan di jaringan yang sama, dan aplikasi mobile bisa memanggil BE di laptop dev.",
 		Source:         "ai_agent",
 	})
 
