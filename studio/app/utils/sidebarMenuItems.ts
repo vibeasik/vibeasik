@@ -53,6 +53,7 @@ export const normalizeProjectTab = (tab: unknown): string => {
 // ringkas → periksa menyeluruh (performa, data, tampilan, kecepatan, trafik, keamanan) → kerjakan todo → struktur → operasional.
 const PROJECT_GROUPS: Record<string, string> = {
   'home': 'Ringkasan',
+  'project-docs': 'Ringkasan',
   'audit-report': 'Periksa & tingkatkan',
   'process-cost': 'Periksa & tingkatkan',
   'runtime-test': 'Periksa & tingkatkan',
@@ -68,7 +69,7 @@ const PROJECT_GROUPS: Record<string, string> = {
   'delivery': 'Operasional'
 }
 const PROJECT_ORDER = [
-  'home', 'tab:overview', 'tab:recap',
+  'home', 'tab:overview', 'tab:recap', 'project-docs',
   'audit-report', 'process-cost', 'runtime-test', 'traffic', 'security-test', 'screenshots',
   'todos', 'queue', 'client-room', 'audit-learning',
   'tab:apps', 'tab:technical', 'tab:synergy', 'code-map',
@@ -101,6 +102,15 @@ export const buildProjectNavItems = (activeProjectId: number | null, activeProje
       desc: 'Status & cara memakai',
       icon: 'i-lucide-house',
       exact: true
+    },
+    {
+      // Dokumen teknis proyek aktif (latar belakang → stack → API → pengujian), bisa diekspor ke PDF.
+      id: 'project-docs',
+      to: '/project-docs',
+      label: 'Dokumen Proyek',
+      desc: 'Dokumen teknis lengkap & ekspor PDF',
+      icon: 'i-lucide-book-text',
+      exact: false
     },
     {
       // Satu-satunya ruang obrolan pengguna (klien) dengan dewan eksekutif proyek aktif.

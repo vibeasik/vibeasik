@@ -92,25 +92,29 @@ useHead({
     <template v-else>
       <div class="min-h-screen bg-white dark:bg-[#020c18] text-neutral-900 dark:text-slate-100 flex font-sans transition-colors duration-200">
         <!-- Left Sidebar (Desktop persistent + Mobile drawer) -->
-        <AppSidebar
-          :collapsed="sidebarCollapsed"
-          :mobile-open="mobileSidebarOpen"
-          :api-connected="apiConnected"
-          @toggle-collapse="toggleDesktopSidebar"
-          @close-mobile="closeMobileSidebar"
-        />
+        <div class="contents print:hidden">
+          <AppSidebar
+            :collapsed="sidebarCollapsed"
+            :mobile-open="mobileSidebarOpen"
+            :api-connected="apiConnected"
+            @toggle-collapse="toggleDesktopSidebar"
+            @close-mobile="closeMobileSidebar"
+          />
+        </div>
 
         <!-- Main Shell Area (Navbar + Page Content + Footer) -->
         <div class="flex-1 flex flex-col min-w-0 min-h-screen">
-          <UpdateBanner />
-          <!-- Top Navbar -->
-          <AppNavbar
-            :api-connected="apiConnected"
-            :checking="checking"
-            @check-api="checkApiStatus"
-            @toggle-mobile-sidebar="toggleMobileSidebar"
-            @toggle-desktop-sidebar="toggleDesktopSidebar"
-          />
+          <!-- Navigasi tidak ikut dicetak (Dokumen Proyek → Ekspor PDF). -->
+          <div class="contents print:hidden">
+            <UpdateBanner />
+            <AppNavbar
+              :api-connected="apiConnected"
+              :checking="checking"
+              @check-api="checkApiStatus"
+              @toggle-mobile-sidebar="toggleMobileSidebar"
+              @toggle-desktop-sidebar="toggleDesktopSidebar"
+            />
+          </div>
 
           <!-- Page Content -->
           <main :class="isFullHeight ? 'w-full h-[calc(100dvh-4rem)] pb-8 flex flex-col overflow-hidden' : isFluid ? 'flex-1 w-full p-0 flex flex-col pb-16 sm:pb-24' : 'flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-16 sm:pb-24'">
@@ -121,11 +125,13 @@ useHead({
         </div>
       </div>
 
-      <!-- Mini Popup Ping LLM Notification (Pojok Kiri Bawah) -->
-      <LLMPingMiniPopup />
+      <div class="contents print:hidden">
+        <!-- Mini Popup Ping LLM Notification (Pojok Kiri Bawah) -->
+        <LLMPingMiniPopup />
 
-      <!-- Fixed Footer Background Tasks & LLM Worker Monitor -->
-      <QueueFooterBar :sidebar-collapsed="sidebarCollapsed" />
+        <!-- Fixed Footer Background Tasks & LLM Worker Monitor -->
+        <QueueFooterBar :sidebar-collapsed="sidebarCollapsed" />
+      </div>
     </template>
   </UApp>
 </template>
