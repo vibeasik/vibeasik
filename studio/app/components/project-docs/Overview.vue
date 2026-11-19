@@ -4,6 +4,8 @@ import type { DocData } from '~/utils/projectDocLabels'
 import { DOC_FEATURE_STATUS, DOC_MATURITY, DOC_STATUS, DOC_TABLE, DOC_TD, DOC_TH, docDate, docInline, docRole } from '~/utils/projectDocLabels'
 
 const props = defineProps<{ doc: DocData }>()
+const emit = defineEmits<{ edit: [tab: string] }>()
+const notes = computed(() => props.doc.notes)
 
 const p = computed(() => props.doc.project)
 const prof = computed(() => props.doc.profile)
@@ -13,6 +15,8 @@ const identity = computed(() => {
   if (!pr) return []
   return [
     ['Nama proyek', pr.name],
+    ['Versi dokumen', notes.value.version || '—'],
+    ['Penyusun', notes.value.authors || '—'],
     ['Jenis', pr.project_type || '—'],
     ['Status', DOC_STATUS[pr.status] || pr.status],
     ['Kematangan', prof.value?.maturity?.stage ? DOC_MATURITY[prof.value.maturity.stage] : '—'],
@@ -64,8 +68,10 @@ const plannedFeatures = computed(() => (prof.value?.features || []).filter(f => 
       id="latar-belakang"
       no="2"
       title="Latar belakang & masalah"
-      :empty="prof?.purpose?.problem ? '' : 'Belum ada uraian masalah. Susun profil proyek di Ringkasan Proyek agar bagian ini terisi.'"
+      :empty="prof?.purpose?.problem || notes.background ? '' : 'Belum ada uraian masalah. Susun profil proyek di Ringkasan Proyek, atau tulis latar belakang lewat Edit catatan.'"
     >
+      <!-- eslint-disable-next-line vue/no-v-html -- docInline meng-escape teks lebih dulu -->
+      <p v-if="notes.background" class="whitespace-pre-line" v-html="docInline(notes.background)" />
       <template v-if="prof?.purpose?.problem">
         <!-- eslint-disable-next-line vue/no-v-html -- docInline meng-escape teks lebih dulu -->
         <p class="whitespace-pre-line" v-html="docInline(prof.purpose.problem)" />
@@ -80,6 +86,9 @@ const plannedFeatures = computed(() => (prof.value?.features || []).filter(f => 
           Kematangan saat ini: <b>{{ DOC_MATURITY[prof.maturity.stage] || prof.maturity.stage }}</b> — {{ prof.maturity.reason }}
         </p>
       </template>
+      <UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-pencil" class="print:hidden -ml-2" @click="emit('edit', 'umum')">
+        {{ notes.background ? 'Edit latar belakang' : 'Tulis latar belakang' }}
+      </UButton>
     </ProjectDocsSection>
 
     <ProjectDocsSection
@@ -156,9 +165,39 @@ const plannedFeatures = computed(() => (prof.value?.features || []).filter(f => 
           </table>
         </div>
         <p v-if="plannedFeatures.length" class="text-xs text-neutral-500">
-          Di luar lingkup rilis saat ini: {{ plannedFeatures.map(f => f.name).join(', ') }}.
+          Belum termasuk rilis saat ini: {{ plannedFeatures.map(f => f.name).join(', ') }}.
         </p>
       </template>
+      <div v-if="notes.out_of_scope.length" class="break-inside-avoid">
+        <div class="text-xs font-semibold text-neutral-900 dark:text-white mt-4 mb-1">
+          Di luar lingkup
+        </div>
+        <ul class="list-disc pl-5 space-y-0.5">
+          <li v-for="(o, i) in notes.out_of_scope" :key="i">
+            {{ o }}
+          </li>
+        </ul>
+      </div>
+      <div v-if="notes.non_functional.length" class="break-inside-avoid">
+        <div class="text-xs font-semibold text-neutral-900 dark:text-white mt-4 mb-1">
+          Kebutuhan non-fungsional
+        </div>
+        <table :class="DOC_TABLE">
+          <tbody>
+            <tr v-for="(r, i) in notes.non_functional" :key="i">
+              <td :class="DOC_TD" class="w-1/4 font-medium">
+                {{ r.name }}
+              </td>
+              <td :class="DOC_TD">
+                {{ r.target }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-pencil" class="print:hidden -ml-2" @click="emit('edit', 'lingkup')">
+        {{ notes.out_of_scope.length || notes.non_functional.length ? 'Edit di luar lingkup & kebutuhan mutu' : 'Tambah di luar lingkup & kebutuhan mutu' }}
+      </UButton>
     </ProjectDocsSection>
 
     <ProjectDocsSection id="stack" no="5" title="Stack teknologi" :empty="doc.stack.length ? '' : 'Belum ada aplikasi terdaftar. Tambahkan aplikasi atau jalankan pindai cepat.'">

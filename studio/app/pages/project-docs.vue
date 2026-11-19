@@ -6,6 +6,7 @@
  * khusus: sampul, tanpa navigasi, mode terang), jadi teksnya tetap bisa dicari & disalin di PDF.
  */
 import { DOC_SECTIONS, useProjectDocument } from '~/composables/useProjectDocument'
+import type { ProjectDocContent } from '~/utils/projectDocLabels'
 import { docDate, docInline } from '~/utils/projectDocLabels'
 
 definePageMeta({ fluid: true })
@@ -70,6 +71,19 @@ const exportPdf = async () => {
   setTimeout(() => window.print(), 250)
 }
 
+// ---------- Editor catatan tertulis ----------
+const editorOpen = ref(false)
+const editorTab = ref('umum')
+const openEditor = (tab = 'umum') => {
+  editorTab.value = tab
+  editorOpen.value = true
+}
+const toast = useToast()
+const saveNotes = async (content: ProjectDocContent) => {
+  await doc.saveNotes(content)
+  toast.add({ title: 'Catatan dokumen disimpan', icon: 'i-lucide-check-circle', color: 'success' })
+}
+
 const sourcesMissing = computed(() => doc.sources.filter(s => s.state !== 'ok').length)
 </script>
 
@@ -89,6 +103,9 @@ const sourcesMissing = computed(() => doc.sources.filter(s => s.state !== 'ok').
       <template #actions>
         <UButton size="sm" color="neutral" variant="outline" icon="i-lucide-refresh-cw" :loading="doc.loading" @click="doc.load()">
           Muat ulang
+        </UButton>
+        <UButton size="sm" color="neutral" variant="outline" icon="i-lucide-pencil" :disabled="!doc.project" @click="openEditor('umum')">
+          Edit catatan
         </UButton>
         <UButton size="sm" color="neutral" icon="i-lucide-file-down" :loading="exporting" :disabled="!doc.project || doc.loading" @click="exportPdf">
           Ekspor PDF
@@ -143,6 +160,15 @@ const sourcesMissing = computed(() => doc.sources.filter(s => s.state !== 'ok').
             </li>
           </ol>
           <div class="mt-auto pt-12 text-xs text-neutral-500 space-y-0.5">
+            <div v-if="doc.notes.version || doc.notes.authors" class="text-sm text-neutral-700">
+              <template v-if="doc.notes.version">
+                Versi {{ doc.notes.version }}
+              </template><template v-if="doc.notes.version && doc.notes.authors">
+                ·
+              </template><template v-if="doc.notes.authors">
+                {{ doc.notes.authors }}
+              </template>
+            </div>
             <div>Disusun {{ docDate(doc.loadedAt) }} oleh vibeasik Studio</div>
             <div v-if="doc.project.git_remote" class="font-mono">
               {{ doc.project.git_remote }}<template v-if="doc.project.git_branch">
@@ -152,13 +178,22 @@ const sourcesMissing = computed(() => doc.sources.filter(s => s.state !== 'ok').
           </div>
         </header>
 
-        <ProjectDocsOverview :doc="doc" />
+        <ProjectDocsOverview :doc="doc" @edit="openEditor" />
         <ProjectDocsTechnical :doc="doc" />
         <ProjectDocsTesting :doc="doc" />
         <ProjectDocsRisks :doc="doc" />
+        <ProjectDocsNotes :doc="doc" @edit="openEditor" />
       </article>
 
       <ProjectDocsSheet :doc="doc" :active-id="activeId" class="lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto no-scrollbar print:static print:max-h-none print:mt-0" />
     </div>
+
+    <ProjectDocsNotesEditor
+      v-model:open="editorOpen"
+      v-model:tab="editorTab"
+      :content="doc.notes"
+      :saving="doc.savingNotes"
+      :save="saveNotes"
+    />
   </div>
 </template>

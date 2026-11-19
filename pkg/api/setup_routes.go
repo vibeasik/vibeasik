@@ -66,6 +66,8 @@ func (s *Server) setupRoutes() {
 	api.Post("/projects/:id/merge", s.mergeProject)
 	api.Post("/projects/:id/summary", s.generateProjectSummary)
 	api.Get("/projects/:id/todos", s.getProjectTodos)
+	api.Get("/projects/:id/doc-notes", s.getProjectDocNotes)
+	api.Put("/projects/:id/doc-notes", s.putProjectDocNotes)
 	api.Get("/projects/:id/code-map", s.getCodeMap)
 	api.Post("/projects/:id/code-map/build", s.buildCodeMap)
 	api.Get("/projects/:id/code-map/search", s.searchCodeMap)

@@ -181,7 +181,7 @@ const languages = computed(() => Object.entries(cm.value?.languages || {}).sort(
             Dokumen ini memuat {{ ROUTE_LIMIT }} endpoint pertama; katalog lengkap ada di halaman Rute, File & Env.
           </template>
         </p>
-        <div v-for="[group, list] in routeGroups" :key="group" >
+        <div v-for="[group, list] in routeGroups" :key="group">
           <div class="text-xs font-semibold text-neutral-900 dark:text-white mt-4 mb-1">
             {{ group }} <span class="font-normal text-neutral-400 tabular-nums">({{ list.length }})</span>
           </div>

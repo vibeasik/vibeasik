@@ -117,6 +117,7 @@ func migrateDatabaseSchema(db *gorm.DB) error {
 		&models.RuntimeSimReport{},
 		&models.RuntimeTestProfile{},
 		&models.ProjectChatMessage{},
+		&models.ProjectDocNotes{},
 		&models.WorkspaceSettings{},
 		&models.AgentWorker{},
 		&models.AgentProfile{},

@@ -63,3 +63,35 @@ export const docInline = (text?: string | null) => (text || '')
 
 // Berkas hasil build/vendor tidak mewakili kode proyek (mis. bundel _nuxt lama, .min.js, dist/).
 export const isGeneratedPath = (p: string) => /(^|\/)(_nuxt|dist|build|vendor|node_modules|\.output|\.nuxt)\/|\.min\.(js|css)$/.test(p)
+
+// ---------- Bagian yang ditulis tangan (GET/PUT /api/projects/:id/doc-notes) ----------
+export interface ProjectDocDecision {
+  title: string
+  date: string
+  status: '' | 'proposed' | 'accepted' | 'superseded' | 'deprecated'
+  context: string
+  decision: string
+  consequences: string
+}
+
+export interface ProjectDocContent {
+  version: string
+  authors: string
+  background: string
+  out_of_scope: string[]
+  non_functional: { name: string, target: string }[]
+  decisions: ProjectDocDecision[]
+  glossary: { term: string, definition: string }[]
+  changelog: { version: string, date: string, changes: string }[]
+}
+
+export const emptyDocContent = (): ProjectDocContent => ({
+  version: '', authors: '', background: '', out_of_scope: [], non_functional: [], decisions: [], glossary: [], changelog: []
+})
+
+export const DOC_ADR_STATUS: Record<string, { label: string, color: 'success' | 'warning' | 'neutral' | 'error' }> = {
+  proposed: { label: 'Diusulkan', color: 'warning' },
+  accepted: { label: 'Diterima', color: 'success' },
+  superseded: { label: 'Digantikan', color: 'neutral' },
+  deprecated: { label: 'Tidak berlaku', color: 'error' }
+}

@@ -1,4 +1,6 @@
 import type { Ref } from 'vue'
+import type { ProjectDocContent } from '~/utils/projectDocLabels'
+import { emptyDocContent } from '~/utils/projectDocLabels'
 import type {
   BaseKnowledgeRoute, CodeMapOverview, CodeMapOverviewFile, CodeMapSearchHit, DiagnosticReportResponse, Project, ProjectBaseKnowledge,
   ProjectProfile, RuntimeSimSession, SecurityTestReport
@@ -43,10 +45,13 @@ export const DOC_SECTIONS: DocSectionMeta[] = [
       { id: 'uji-audit', no: '12.5', title: 'Audit kode statis' }
     ]
   },
-  { id: 'risiko', no: '13', title: 'Risiko, roadmap & pertanyaan terbuka' }
+  { id: 'risiko', no: '13', title: 'Risiko, roadmap & pertanyaan terbuka' },
+  { id: 'keputusan', no: '14', title: 'Keputusan teknis (ADR)' },
+  { id: 'glosarium', no: '15', title: 'Glosarium' },
+  { id: 'riwayat', no: '16', title: 'Riwayat versi dokumen' }
 ]
 
-export type DocSourceKey = 'profile' | 'knowledge' | 'codemap' | 'runtime' | 'security' | 'audit'
+export type DocSourceKey = 'profile' | 'knowledge' | 'codemap' | 'runtime' | 'security' | 'audit' | 'notes'
 
 export interface DocSourceState {
   key: DocSourceKey
@@ -65,6 +70,13 @@ export interface DocTestFile {
   summary?: string
   cases: string[]
 }
+
+// Dokumen bisa dibagikan sebagai PDF: alat token/seed/kredensial tidak dijadikan contoh kode, dan email serta
+// nilai rahasia yang tertulis di kode disamarkan.
+const SENSITIVE_PATH = /(token|secret|seed|passw|credential|cred|apikey|api_key|private|\.env)/i
+const redactSnippet = (code: string) => code
+  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
+  .replace(/((?:pass(?:word)?|secret|token|api[_-]?key|private[_-]?key|dsn)\w*["']?\s*[:=]+\s*)(["'`])[^"'`\n]{3,}\2/gi, '$1$2•••$2')
 
 const statusOf = (err: any): number => err?.statusCode ?? err?.status ?? err?.response?.status ?? 0
 
@@ -86,6 +98,11 @@ export function useProjectDocument(projectId: Ref<number | null>) {
   const audit = ref<DiagnosticReportResponse | null>(null)
   const entrySnippets = ref<CodeMapSearchHit[]>([])
   const componentRoutes = ref<BaseKnowledgeRoute[]>([])
+  // Bagian yang ditulis tangan (ADR, di luar lingkup, glosarium, riwayat versi).
+  const notes = ref<ProjectDocContent>(emptyDocContent())
+  const notesUpdatedAt = ref<string | null>(null)
+  const savingNotes = ref(false)
+  const notesUrl = (pid: number) => `${api.apiBase}/api/projects/${pid}/doc-notes`
   const sources = ref<DocSourceState[]>([])
   const loading = ref(false)
   const error = ref('')
@@ -125,7 +142,7 @@ export function useProjectDocument(projectId: Ref<number | null>) {
       return
     }
     const pid = id
-    const [prof, bk, cm, rt, sec, aud] = await Promise.all([
+    const [prof, bk, cm, rt, sec, aud, nt] = await Promise.all([
       settle('profile', 'Profil proyek', `/projects/${pid}`, () => api.getProjectProfile(pid),
         'Belum disusun — buka Ringkasan Proyek lalu susun profil'),
       // Cache Base Knowledge yang belum dikompilasi berisi lingkup kosong: diperlakukan sebagai belum ada.
@@ -139,7 +156,9 @@ export function useProjectDocument(projectId: Ref<number | null>) {
       settle('security', 'Uji keamanan', '/security-test', () => security.getState(pid).then(r => r?.report || null),
         'Belum pernah dijalankan'),
       settle('audit', 'Audit & diagnostik', '/audit-report', () => api.getLatestProjectDiagnostic(pid).then(r => (r?.diagnostic ? r : null)),
-        'Belum pernah diaudit')
+        'Belum pernah diaudit'),
+      settle('notes', 'Catatan tertulis (ADR, glosarium)', '', () => $fetch<{ content: ProjectDocContent, updated_at: string | null }>(notesUrl(pid))
+        .then(r => (r?.updated_at ? r : null)), 'Belum ditulis — tekan Edit catatan')
     ])
     if (projectId.value !== pid) return
     profile.value = prof
@@ -148,6 +167,8 @@ export function useProjectDocument(projectId: Ref<number | null>) {
     runtime.value = rt
     securityReport.value = sec
     audit.value = aud
+    notes.value = { ...emptyDocContent(), ...(nt?.content || {}) }
+    notesUpdatedAt.value = nt?.updated_at || null
     // Tanpa Base Knowledge, katalog rute diambil langsung dari rute tersinkron tiap aplikasi.
     componentRoutes.value = bk?.routers_scope?.routes?.length
       ? []
@@ -159,14 +180,31 @@ export function useProjectDocument(projectId: Ref<number | null>) {
           .catch(() => [] as BaseKnowledgeRoute[])))).flat()
     // Potongan kode titik masuk untuk bagian "Struktur kode & contoh" (tidak wajib; abaikan bila gagal).
     entrySnippets.value = cm
-      ? await codeMap.search(pid, 'main entry server router bootstrap', { kind: 'entry', limit: 3, snippet: true })
-          .then(r => (r.hits || []).filter(h => h.snippet).slice(0, 3)).catch(() => [])
+      ? await codeMap.search(pid, 'main entry server router bootstrap', { kind: 'entry', limit: 8, snippet: true })
+          .then(r => (r.hits || []).filter(h => h.snippet && !SENSITIVE_PATH.test(h.path)).slice(0, 3)
+            .map(h => ({ ...h, snippet: redactSnippet(h.snippet || '') }))).catch(() => [])
       : []
     loadedAt.value = new Date()
     loading.value = false
   }
 
   watch(projectId, (id, old) => { if (id && id !== old) load() })
+
+  // Simpan seluruh catatan (PUT mengganti isi). Galat dilempar ke pemanggil untuk ditampilkan di editor.
+  const saveNotes = async (content: ProjectDocContent) => {
+    const pid = projectId.value
+    if (!pid) return
+    savingNotes.value = true
+    try {
+      const r = await $fetch<{ content: ProjectDocContent, updated_at: string }>(notesUrl(pid), { method: 'PUT', body: content })
+      notes.value = { ...emptyDocContent(), ...r.content }
+      notesUpdatedAt.value = r.updated_at
+      const src = sources.value.find(x => x.key === 'notes')
+      if (src) Object.assign(src, { state: 'ok', hint: 'Termuat', fixTo: undefined })
+    } finally {
+      savingNotes.value = false
+    }
+  }
 
   // ---------- Turunan untuk bagian dokumen ----------
   // Path aplikasi relatif terhadap folder proyek (relative_path sering kosong bila hanya absolute_path yang tercatat).
@@ -245,6 +283,7 @@ export function useProjectDocument(projectId: Ref<number | null>) {
 
   return {
     project, profile, knowledge, overview, runtime, securityReport, audit, entrySnippets, sources,
+    notes, notesUpdatedAt, savingNotes, saveNotes,
     loading, error, loadedAt, load,
     components, stack, testFiles, testCaseCount, testRatio, routes, backendRoutes, pageRoutes, curlExample
   }
