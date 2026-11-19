@@ -100,9 +100,9 @@ func openDatabaseConnection(dbPathOverride string, cfg *config.Config, gormConfi
 	return openDefaultSQLite(cfg, gormConfig)
 }
 
-// migrateDatabaseSchema menjalankan migrasi model dan optimasi kolom pada MySQL.
-func migrateDatabaseSchema(db *gorm.DB) error {
-	err := db.AutoMigrate(
+// schemaModels adalah daftar model inti yang dimigrasi InitDB; juga dasar sidik skema (schemaFingerprint).
+func schemaModels() []interface{} {
+	return []interface{}{
 		&models.Project{},
 		&models.Component{},
 		&models.ComponentRoute{},
@@ -165,7 +165,13 @@ func migrateDatabaseSchema(db *gorm.DB) error {
 		&models.TrafficRecentEvent{},
 		&models.TrafficErrorGroup{},
 		&models.TrafficProcess{},
-	)
+		&SchemaStamp{},
+	}
+}
+
+// migrateDatabaseSchema menjalankan migrasi model dan optimasi kolom pada MySQL.
+func migrateDatabaseSchema(db *gorm.DB) error {
+	err := db.AutoMigrate(schemaModels()...)
 	if err != nil {
 		return fmt.Errorf("failed to migrate database schema: %w", err)
 	}
@@ -225,7 +231,11 @@ func InitDB(dbPathOverride string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	return prepareDB(db)
+}
 
+// prepareDB memigrasi skema, mengisi data bawaan, memasang hook runtime, lalu mencatat cap skema.
+func prepareDB(db *gorm.DB) (*gorm.DB, error) {
 	if err := migrateDatabaseSchema(db); err != nil {
 		return nil, err
 	}
@@ -238,13 +248,11 @@ func InitDB(dbPathOverride string) (*gorm.DB, error) {
 	ensureDefaultWorkspaceSettings(db)
 	ensureDefaultCensoredKeywords(db)
 	ensureDefaultTodos(db)
-	// Todo gabungan (Aturan 43): sub todo mengikuti status induknya di semua jalur update/hapus todo.
-	models.RegisterSubTodoSettle(db)
+	attachRuntime(db)
 	if n := models.SettleSubTodos(db); n > 0 {
 		log.Printf("[Database] %d sub todo diselaraskan dengan todo gabungannya", n)
 	}
-
-	models.SetLLMHealthDB(db)
+	writeSchemaStamp(db)
 	return db, nil
 }
 

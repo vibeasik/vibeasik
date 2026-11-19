@@ -51,7 +51,7 @@ Can also act as a remote stdio proxy bridge when --remote <url> is passed.`,
 			return runRemoteStdioBridge(targetRemote, token, os.Stdin, os.Stdout)
 		}
 
-		db, err := database.InitDB(dbPath)
+		db, err := database.InitDBFast(dbPath)
 		if err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ var mcpListCmd = &cobra.Command{
 			return listRemoteTools(targetRemote)
 		}
 
-		db, err := database.InitDB(dbPath)
+		db, err := database.InitDBFast(dbPath)
 		if err != nil {
 			return err
 		}
