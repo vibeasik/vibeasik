@@ -411,6 +411,8 @@ func TestAdvisoryFindingsAndPathAliasing(t *testing.T) {
 		{Category: "git", RuleID: RuleGitUncommitted},
 		{RuleID: "PORT-SHARED-3000", Category: "port"},
 		{RuleID: rulePolynomialGrowth},
+		{RuleID: RuleRuntimePortBusySelf, Category: "runtime"},
+		{RuleID: RuleRuntimePortBusyUnknown, Category: "runtime"},
 	} {
 		if !IsAdvisoryFinding(f) {
 			t.Errorf("%s harus berupa catatan (bukan bahan todo)", f.RuleID)
@@ -418,6 +420,10 @@ func TestAdvisoryFindingsAndPathAliasing(t *testing.T) {
 	}
 	if IsAdvisoryFinding(models.Finding{RuleID: "QUERY-SQLI", Category: "query"}) {
 		t.Error("temuan kode bukan catatan")
+	}
+	// Port dipegang proses lain = konfigurasi port aplikasi bertabrakan → boleh jadi todo.
+	if IsAdvisoryFinding(models.Finding{RuleID: "RUNTIME-PORT-BUSY", Category: "runtime"}) {
+		t.Error("port bentrok dengan proses lain bukan catatan")
 	}
 	// Path berkas panjang tidak boleh disamarkan sanitizer rahasia.
 	long := "database/migrations/2025_01_01_000000_create_webinar_participants_table.php"

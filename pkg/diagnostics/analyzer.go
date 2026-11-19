@@ -37,12 +37,19 @@ func componentRef(comp *models.Component) string {
 }
 
 // IsAdvisoryFinding: temuan yang hanya potret keadaan sesaat atau perkiraan, bukan cacat kode yang bisa
-// "diperbaiki" — working tree yang sedang berubah, port bawaan yang sama dengan proyek lain, dan estimasi biaya
-// statis. Ditampilkan di laporan audit, tetapi tidak dijadikan todo otomatis.
+// "diperbaiki" — working tree yang sedang berubah, port bawaan yang sama dengan proyek lain, estimasi biaya
+// statis, dan Uji Runtime yang gagal menyalakan aplikasi karena portnya dipegang aplikasi itu sendiri (atau
+// pemegangnya tak bisa diperiksa). Ditampilkan di laporan audit, tetapi tidak dijadikan todo otomatis.
 func IsAdvisoryFinding(f models.Finding) bool {
 	return f.Category == "git" || f.RuleID == RuleGitUncommitted || strings.HasPrefix(f.RuleID, "PORT-SHARED-") ||
-		f.RuleID == rulePolynomialGrowth
+		f.RuleID == rulePolynomialGrowth || f.RuleID == RuleRuntimePortBusySelf || f.RuleID == RuleRuntimePortBusyUnknown
 }
+
+// Uji Runtime: port bentrok yang dipegang aplikasi itu sendiri / pemegang tak terbaca (lihat IsAdvisoryFinding).
+const (
+	RuleRuntimePortBusySelf    = "RUNTIME-PORT-BUSY-SELF"
+	RuleRuntimePortBusyUnknown = "RUNTIME-PORT-BUSY-UNKNOWN"
+)
 
 // penaltyRule: aturan pengurangan skor berurutan; aturan pertama yang cocok menang.
 // category kosong = semua kategori; tanpa titles & ruleIDs = cocok untuk seluruh kategori itu.
