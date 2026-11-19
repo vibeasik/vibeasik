@@ -4,10 +4,12 @@ go 1.26.4
 
 require (
 	github.com/glebarez/sqlite v1.11.0
+	github.com/go-pdf/fpdf v0.9.0
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
 	gorm.io/driver/mysql v1.6.0
+	golang.org/x/image v0.38.0
 	gorm.io/gorm v1.31.2
 )
 

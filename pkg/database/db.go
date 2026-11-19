@@ -118,6 +118,7 @@ func schemaModels() []interface{} {
 		&models.RuntimeTestProfile{},
 		&models.ProjectChatMessage{},
 		&models.ProjectDocNotes{},
+		&models.ProjectBrand{},
 		&models.WorkspaceSettings{},
 		&models.AgentWorker{},
 		&models.AgentProfile{},

@@ -2,11 +2,12 @@
 /**
  * Dokumen Proyek: dokumen teknis proyek aktif yang dirakit otomatis dari data engine — keterangan, latar belakang,
  * ruang lingkup, stack, arsitektur, API, konfigurasi, cara menjalankan, struktur kode, dan pengujian.
- * Kiri isi dokumen bernomor, kanan daftar isi + lembar teknis. Ekspor PDF memakai cetak browser (tata letak cetak
- * khusus: sampul, tanpa navigasi, mode terang), jadi teksnya tetap bisa dicari & disalin di PDF.
+ * Kiri isi dokumen bernomor, kanan daftar isi + lembar teknis. Cetak browser (tata letak cetak
+ * khusus) tetap tersedia lewat Ctrl+P; tombol Ekspor PDF memakai PDF susunan engine bertema warna merek proyek.
  */
 import { DOC_SECTIONS, useProjectDocument } from '~/composables/useProjectDocument'
-import type { ProjectDocContent } from '~/utils/projectDocLabels'
+import type { DocData, ProjectDocContent } from '~/utils/projectDocLabels'
+import { buildPdfDocument } from '~/utils/projectDocPdf'
 import { docDate, docInline } from '~/utils/projectDocLabels'
 
 definePageMeta({ fluid: true })
@@ -48,27 +49,39 @@ watch(() => doc.loading, async (busy) => {
 })
 onBeforeUnmount(() => observer?.disconnect())
 
+const toast = useToast()
+
 // ---------- Ekspor PDF ----------
-// Cetak selalu dalam mode terang dan judul tab menjadi nama berkas PDF bawaan; keduanya dipulihkan sesudahnya.
-const colorMode = useColorMode()
+// PDF disusun engine (Go) dari isi dokumen yang sama dengan layar: sampul, daftar isi bernomor halaman, header &
+// footer berwarna merek proyek. Studio hanya mengirim isinya lalu mengunduh berkas hasilnya.
+const api = useApi()
 const exporting = ref(false)
 const exportPdf = async () => {
   if (exporting.value || !doc.project) return
   exporting.value = true
-  const prevMode = colorMode.preference
-  const prevTitle = document.title
-  const restore = () => {
-    colorMode.preference = prevMode
-    document.title = prevTitle
+  try {
+    const blob = await $fetch<Blob>(`${api.apiBase}/api/projects/${doc.project.id}/doc-pdf`, {
+      method: 'POST',
+      body: buildPdfDocument(doc as unknown as DocData),
+      responseType: 'blob',
+      timeout: 120000
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Dokumen Teknis - ${doc.project.name} - ${new Date().toISOString().slice(0, 10)}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+    toast.add({ title: 'PDF diunduh', icon: 'i-lucide-file-check', color: 'success' })
+  } catch (err: any) {
+    let msg = err?.data?.error || err?.message || 'Gagal menyusun PDF'
+    if (err?.data instanceof Blob) msg = await err.data.text().then((t: string) => JSON.parse(t)?.error || msg).catch(() => msg)
+    toast.add({ title: 'PDF gagal disusun', description: msg, icon: 'i-lucide-alert-circle', color: 'error' })
+  } finally {
     exporting.value = false
-    window.removeEventListener('afterprint', restore)
   }
-  window.addEventListener('afterprint', restore)
-  colorMode.preference = 'light'
-  document.title = `Dokumen Teknis - ${doc.project.name} - ${new Date().toISOString().slice(0, 10)}`
-  await nextTick()
-  // Beri waktu kelas tema terang terpasang sebelum dialog cetak memotret halaman.
-  setTimeout(() => window.print(), 250)
 }
 
 // ---------- Editor catatan tertulis ----------
@@ -78,7 +91,6 @@ const openEditor = (tab = 'umum') => {
   editorTab.value = tab
   editorOpen.value = true
 }
-const toast = useToast()
 const saveNotes = async (content: ProjectDocContent) => {
   await doc.saveNotes(content)
   toast.add({ title: 'Catatan dokumen disimpan', icon: 'i-lucide-check-circle', color: 'success' })
@@ -98,6 +110,9 @@ const sourcesMissing = computed(() => doc.sources.filter(s => s.state !== 'ok').
       <template v-if="doc.project" #meta>
         <span class="flex items-center gap-1"><UIcon name="i-lucide-folder" class="size-3.5" />{{ doc.project.name }}</span>
         <span class="flex items-center gap-1"><UIcon name="i-lucide-clock" class="size-3.5" />Disusun {{ docDate(doc.loadedAt) }}</span>
+        <NuxtLink :to="`/projects/${doc.project.id}`" class="flex items-center gap-1 hover:text-neutral-900 dark:hover:text-white" title="Warna merek untuk tema PDF — atur di Ringkasan Proyek">
+          <UIcon name="i-lucide-palette" class="size-3.5" />Warna PDF
+        </NuxtLink>
         <span v-if="sourcesMissing" class="rounded-md bg-amber-500/10 px-1.5 text-amber-700 dark:text-amber-400">{{ sourcesMissing }} sumber belum ada</span>
       </template>
       <template #actions>

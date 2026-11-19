@@ -168,5 +168,7 @@ const stats = computed(() => {
       :roadmap="profile.roadmap"
       :open-questions="profile.open_questions"
     />
+
+    <ProjectsDetailProjectBrandColors :project-id="project.id" />
   </div>
 </template>
