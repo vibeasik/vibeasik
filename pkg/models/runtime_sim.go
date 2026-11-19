@@ -84,7 +84,10 @@ type RuntimeSimAuth struct {
 	LoginPath       string `json:"login_path,omitempty"`       // endpoint login API (default dideteksi dari rute POST */login)
 	LoginBody       string `json:"login_body,omitempty"`       // template JSON kustom, placeholder {{identifier}} & {{password}}
 	LoginPagePath   string `json:"login_page_path,omitempty"`  // halaman login frontend (default dideteksi, mis. /login)
-	HasPassword     bool   `json:"has_password,omitempty"`     // hanya untuk tampilan: password tersimpan di profil
+	// LoginHeaders: header tambahan untuk request login API, mis. {"X-Requested-With": "app"} bagi aplikasi
+	// yang menolak POST tanpa header penjaga CSRF. nil = pakai yang tersimpan di profil; {} = kosongkan.
+	LoginHeaders map[string]string `json:"login_headers,omitempty"`
+	HasPassword  bool              `json:"has_password,omitempty"` // hanya untuk tampilan: password tersimpan di profil
 }
 
 // RuntimeTestProfile menyimpan konfigurasi Uji Runtime terakhir per proyek (termasuk akun uji) agar
