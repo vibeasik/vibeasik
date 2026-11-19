@@ -260,6 +260,7 @@ func InspectDirectory(dir string, baseRelPath string) []models.Finding {
 		// Konfigurasi paket Flutter (lint) diperiksa dari pubspec.yaml-nya
 		if info.Name() == "pubspec.yaml" {
 			findings = append(findings, inspectFlutterProject(path, relPath)...)
+			findings = append(findings, inspectPlayReadiness(path, relPath)...)
 			return nil
 		}
 

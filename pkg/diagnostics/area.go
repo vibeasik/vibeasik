@@ -42,6 +42,7 @@ var areaByRule = map[string]string{
 	"SMELL-": AreaCode, "DEEP-FUNC-": AreaCode, "ROUTER-": AreaCode,
 
 	"GIT-": AreaOps, "PORT-": AreaOps, "ENV-": AreaOps, "DEPLOY-": AreaOps, "DEV-SCRIPT": AreaOps,
+	"PLAY-": AreaOps, "SEO-": AreaUI,
 	"MOBILE-DEV-SCRIPT": AreaOps, "STORAGE-": AreaOps, "PROJ-": AreaOps, "RUNTIME-": AreaOps,
 }
 

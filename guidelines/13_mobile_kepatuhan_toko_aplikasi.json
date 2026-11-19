@@ -1,0 +1,147 @@
+{
+  "category": "mobile_kepatuhan_toko_aplikasi",
+  "name": "Kepatuhan Toko Aplikasi (Google Play)",
+  "description": "Checklist kewajiban Google Play yang harus sudah dipenuhi sejak aplikasi dirancang: hapus akun, akun demo untuk peninjau, Google Play Billing, kebijakan privasi, formulir Keamanan Data, izin sensitif, target API, dan syarat rilis. Kebijakan Google berubah berkala; sebelum rilis cocokkan dengan Pusat Kebijakan Developer Google Play.",
+  "guidelines": [
+    {
+      "id": "PLAY-001",
+      "level": "component",
+      "title": "Hapus Akun di Dalam Aplikasi dan Lewat Web",
+      "rule": "Aplikasi yang mengizinkan pengguna membuat akun (daftar email, nomor HP, Google Sign-In, atau lainnya) WAJIB menyediakan (1) menu hapus akun yang mudah ditemukan di dalam aplikasi, dan (2) halaman web publik untuk meminta penghapusan akun tanpa harus memasang ulang aplikasi. Penghapusan akun ikut menghapus data pengguna yang terkait; menonaktifkan, membekukan, atau sekadar logout tidak dihitung. Data yang wajib disimpan karena alasan hukum/keamanan (mis. catatan transaksi) boleh ditahan asal disebutkan jelas beserta masa simpannya.",
+      "rationale": "Google Play menolak aplikasi ber-akun tanpa jalur hapus akun, dan URL penghapusan wajib diisi di formulir Keamanan Data. Menambahkannya belakangan berarti menambah endpoint, layar, halaman web, dan aturan retensi sekaligus saat rilis sudah mepet.",
+      "inspection_check": "Periksa apakah aplikasi punya alur daftar/login; bila ada, cari menu 'Hapus akun' di layar profil/pengaturan, endpoint backend penghapusan akun (bukan soft-disable saja), dan halaman web publik permintaan hapus akun.",
+      "suggested_action": "Sejak fitur akun dibuat, sertakan: endpoint DELETE akun (dengan konfirmasi ulang identitas), layar konfirmasi di Profil/Pengaturan, halaman web /hapus-akun yang bisa diakses tanpa login ke aplikasi, dan catatan data apa yang dihapus serta apa yang ditahan.",
+      "severity": "critical"
+    },
+    {
+      "id": "PLAY-002",
+      "level": "project",
+      "title": "Akun Demo untuk Peninjau Google Play",
+      "rule": "Aplikasi yang sebagian atau seluruh fiturnya ada di balik login, langganan, kode undangan, atau lokasi tertentu WAJIB menyediakan akses peninjauan di Play Console (Akses aplikasi): nama pengguna dan kata sandi akun demo yang selalu aktif, bisa dipakai berulang, dan tidak membutuhkan OTP/SMS/email verifikasi, 2FA, atau persetujuan admin. Akun demo berisi data contoh yang cukup agar semua fitur utama bisa dicoba, termasuk fitur berbayar. Bila login hanya lewat OTP, sediakan nomor/kode uji tetap khusus peninjau.",
+      "rationale": "Peninjau yang tidak bisa masuk akan menolak aplikasi dengan alasan 'tidak dapat mengakses fitur'. Akun demo yang kedaluwarsa atau butuh OTP adalah penyebab penolakan yang paling sering dan paling mudah dicegah.",
+      "inspection_check": "Periksa apakah proyek punya seeder/perintah untuk membuat akun demo beserta datanya, apakah alur login punya jalur tanpa OTP untuk akun itu, dan apakah kredensialnya dicatat di tempat rahasia proyek (bukan di repo).",
+      "suggested_action": "Buat seeder akun demo (peran pengguna biasa dan, bila ada, peran lain yang perlu ditinjau) dengan data contoh; kecualikan akun itu dari OTP dan dari pembersihan otomatis; tulis langkah masuknya untuk kolom instruksi Play Console.",
+      "severity": "critical"
+    },
+    {
+      "id": "PLAY-003",
+      "level": "component",
+      "title": "Barang dan Layanan Digital Wajib Lewat Google Play Billing",
+      "rule": "Penjualan barang atau layanan DIGITAL yang dipakai di dalam aplikasi (langganan, fitur premium, koin/kredit, konten digital, hapus iklan, tingkat akun) WAJIB memakai sistem penagihan Google Play. Dilarang mengarahkan pengguna dari dalam aplikasi ke cara bayar lain (tautan web, transfer bank, QRIS, payment gateway) untuk barang digital, kecuali aplikasi sudah terdaftar pada program resmi Google yang mengizinkannya di negara tujuan (mis. penagihan pilihan pengguna / user choice billing, atau program tautan penawaran eksternal), dengan syarat dan biaya layanan program itu.",
+      "rationale": "Pelanggaran kebijakan pembayaran berujung penolakan update sampai penghapusan aplikasi. Mengganti payment gateway dengan Play Billing setelah aplikasi jadi berarti menulis ulang alur beli, verifikasi server, dan entitlement.",
+      "inspection_check": "Daftar semua yang dijual aplikasi dan golongkan digital atau fisik. Periksa apakah item digital dibeli lewat in_app_purchase/Play Billing dan diverifikasi di server (purchase token), serta tidak ada tombol/tautan bayar lain untuk item itu.",
+      "suggested_action": "Tentukan jenis barang saat merancang fitur berbayar. Item digital: pakai Play Billing, verifikasi purchase token di backend, dan acknowledge pembelian. Bila ingin cara bayar lain, daftar dulu ke program resmi yang berlaku di negara tujuan sebelum menulis kodenya.",
+      "severity": "critical"
+    },
+    {
+      "id": "PLAY-004",
+      "level": "component",
+      "title": "Syarat Memakai Pembayaran di Luar Google Play Billing",
+      "rule": "Pembayaran selain Play Billing (payment gateway, transfer, QRIS, COD) hanya boleh untuk yang dikecualikan kebijakan: barang fisik, layanan fisik/di dunia nyata (transportasi, makanan, jasa, tiket acara, pesanan toko), pembayaran antar pengguna (P2P), tagihan/utilitas, dan konten yang dibeli serta dipakai di luar aplikasi. Aplikasi yang memakai pengecualian ini tidak boleh menjual item digital lewat jalur yang sama, dan aplikasi dengan fitur keuangan (pinjaman, dompet, investasi, kripto) wajib mengisi deklarasi fitur keuangan serta memenuhi izin regulator setempat.",
+      "rationale": "Payment gateway sah untuk barang fisik, tetapi peninjau menolak bila ada satu saja item digital yang ikut lewat jalur itu. Batasnya harus diputuskan per item, bukan per aplikasi.",
+      "inspection_check": "Bila pubspec/gradle memuat SDK payment gateway, periksa setiap produk yang dibayar lewat SDK itu: apakah semuanya barang/layanan fisik atau termasuk pengecualian. Periksa deklarasi fitur keuangan bila ada pinjaman/dompet/investasi.",
+      "suggested_action": "Tulis tabel produk → jenis (digital/fisik) → jalur bayar di dokumen proyek. Pisahkan alur beli item digital (Play Billing) dari item fisik (payment gateway) di kode, sehingga tidak ada item digital yang bisa masuk checkout gateway.",
+      "severity": "high"
+    },
+    {
+      "id": "PLAY-005",
+      "level": "component",
+      "title": "Langganan: Syarat Jelas dan Mudah Dibatalkan",
+      "rule": "Layar penawaran langganan WAJIB menampilkan harga, periode tagihan, isi yang didapat, masa uji coba dan harga setelahnya, serta bahwa langganan diperpanjang otomatis, sebelum pengguna menekan beli. Aplikasi menyediakan cara mengelola/membatalkan langganan yang mudah ditemukan (tautan ke pengelolaan langganan Google Play) dan tidak menyembunyikan tombol tutup pada paywall.",
+      "rationale": "Paywall yang menyesatkan atau langganan yang sulit dibatalkan melanggar kebijakan langganan dan memicu refund, ulasan buruk, serta penangguhan.",
+      "inspection_check": "Periksa layar paywall: apakah harga, periode, perpanjangan otomatis, dan ketentuan uji coba tampil sebelum pembelian; apakah ada menu kelola langganan di pengaturan.",
+      "suggested_action": "Ambil harga dan periode dari detail produk Play Billing (bukan teks tetap), tampilkan ketentuan perpanjangan, dan tambahkan menu 'Kelola langganan' yang membuka halaman langganan Google Play.",
+      "severity": "high"
+    },
+    {
+      "id": "PLAY-006",
+      "level": "project",
+      "title": "Kebijakan Privasi di Web dan di Dalam Aplikasi",
+      "rule": "Setiap aplikasi WAJIB punya kebijakan privasi pada URL publik yang aktif (halaman web biasa, bukan PDF, tidak dibatasi wilayah, tidak butuh login), dicantumkan di Play Console DAN bisa dibuka dari dalam aplikasi (mis. layar daftar dan menu pengaturan). Isinya menyebut nama aplikasi/pengembang, data yang dikumpulkan, tujuan, pihak ketiga penerima data, masa simpan dan cara penghapusan, serta kontak.",
+      "rationale": "Kebijakan privasi yang hilang, mati, atau tidak cocok dengan perilaku aplikasi adalah alasan penolakan dan penghapusan yang umum, dan berlaku juga untuk aplikasi yang merasa tidak mengumpulkan data.",
+      "inspection_check": "Cari tautan kebijakan privasi di layar daftar/login dan pengaturan aplikasi; periksa URL-nya publik dan isinya sesuai data yang benar-benar dikumpulkan aplikasi dan SDK-nya.",
+      "suggested_action": "Buat halaman /kebijakan-privasi di website proyek sejak awal, tautkan dari layar daftar dan pengaturan, dan perbarui setiap kali menambah SDK atau jenis data baru.",
+      "severity": "critical"
+    },
+    {
+      "id": "PLAY-007",
+      "level": "project",
+      "title": "Formulir Keamanan Data Sesuai Perilaku Aplikasi",
+      "rule": "Formulir Keamanan Data (Data safety) di Play Console WAJIB diisi sesuai data yang benar-benar dikumpulkan dan dibagikan aplikasi, TERMASUK oleh SDK pihak ketiga (analitik, iklan, crash report, login sosial, peta, pembayaran). Formulir memuat apakah data dienkripsi saat dikirim dan URL permintaan hapus akun/data. Setiap SDK atau jenis data baru memperbarui formulir ini sebelum rilis.",
+      "rationale": "Google membandingkan isian formulir dengan perilaku aplikasi; ketidakcocokan dianggap menyesatkan pengguna dan dapat memblokir update.",
+      "inspection_check": "Periksa apakah proyek punya inventaris data: jenis data, tujuan, SDK yang mengirimnya, dan apakah dibagikan. Cocokkan dengan dependensi di pubspec/gradle.",
+      "suggested_action": "Simpan inventaris data di dokumen proyek (jenis data → sumber → tujuan → dibagikan ke siapa) dan perbarui pada setiap penambahan dependensi yang mengirim data.",
+      "severity": "high"
+    },
+    {
+      "id": "PLAY-008",
+      "level": "component",
+      "title": "Izin Minimal dan Izin Sensitif Berdeklarasi",
+      "rule": "Aplikasi hanya meminta izin yang dipakai fitur intinya, diminta saat fitur itu digunakan (bukan saat buka aplikasi), disertai penjelasan, dan tetap berjalan wajar bila ditolak. Izin sensitif/terbatas — SMS dan log panggilan, lokasi latar belakang, akses semua berkas, daftar aplikasi terpasang (QUERY_ALL_PACKAGES), aksesibilitas, akses luas foto/video, alarm tepat, notifikasi layar penuh, dan foreground service bertipe — membutuhkan formulir deklarasi di Play Console dan hanya disetujui untuk kasus pakai inti. Pakai alternatif yang tidak butuh izin bila ada (pemilih foto sistem, lokasi saat dipakai).",
+      "rationale": "Izin sensitif tanpa kasus pakai inti ditolak; izin yang ikut dari plugin tetapi tidak dipakai tetap dihitung dan harus dihapus dari manifest.",
+      "inspection_check": "Bandingkan izin di AndroidManifest hasil gabungan (termasuk dari plugin) dengan fitur aplikasi; tandai izin tanpa fitur pemakainya dan izin sensitif yang belum punya alasan tertulis.",
+      "suggested_action": "Hapus izin tak terpakai (tools:node=\"remove\" untuk izin bawaan plugin), minta izin tepat sebelum fitur dipakai, dan tulis alasan tiap izin sensitif untuk formulir deklarasi.",
+      "severity": "high"
+    },
+    {
+      "id": "PLAY-009",
+      "level": "component",
+      "title": "Target API Terbaru, AAB, dan Play App Signing",
+      "rule": "Aplikasi baru dan setiap update WAJIB menargetkan API level yang disyaratkan Google Play (paling lama satu tahun di belakang rilis Android utama terbaru; batasnya naik tiap 31 Agustus), diunggah sebagai Android App Bundle (.aab) dengan Play App Signing, memakai applicationId final sejak rilis pertama, versionCode yang selalu naik, dan mendukung ukuran halaman memori 16 KB untuk pustaka native.",
+      "rationale": "Update dengan targetSdk lama ditolak saat unggah; applicationId dan kunci tanda tangan tidak bisa diganti setelah rilis pertama.",
+      "inspection_check": "Periksa targetSdk di android/app/build.gradle(.kts), applicationId (bukan com.example.*), konfigurasi signing rilis (kunci tidak di repo), dan versi di pubspec.yaml.",
+      "suggested_action": "Ikuti targetSdk bawaan Flutter terbaru atau set ke API yang disyaratkan, tetapkan applicationId final sebelum unggah pertama, aktifkan Play App Signing, dan simpan upload key di luar repo.",
+      "severity": "high"
+    },
+    {
+      "id": "PLAY-010",
+      "level": "project",
+      "title": "Uji Tertutup Sebelum Produksi untuk Akun Developer Pribadi",
+      "rule": "Akun developer pribadi yang dibuat setelah 13 November 2023 WAJIB menjalankan uji tertutup dengan minimal 12 penguji yang ikut terus-menerus selama 14 hari sebelum boleh mengajukan akses produksi. Jadwal rilis memperhitungkan masa ini ditambah waktu tinjauan aplikasi baru (bisa beberapa hari).",
+      "rationale": "Syarat ini tidak bisa dipercepat; aplikasi yang baru selesai tidak bisa langsung tayang bila masa uji belum dimulai.",
+      "inspection_check": "Periksa jenis akun developer tujuan (pribadi atau organisasi) dan apakah rencana rilis proyek memuat masa uji tertutup serta daftar pengujinya.",
+      "suggested_action": "Unggah build ke uji tertutup segera setelah alur utama berjalan (tidak menunggu aplikasi selesai), kumpulkan minimal 12 penguji sejak awal, atau terbitkan lewat akun organisasi.",
+      "severity": "medium"
+    },
+    {
+      "id": "PLAY-011",
+      "level": "project",
+      "title": "Deklarasi Konten Aplikasi Lengkap",
+      "rule": "Sebelum rilis, bagian Konten aplikasi di Play Console diisi lengkap dan jujur: kuesioner rating konten, target usia dan konten (aplikasi yang menyasar anak mengikuti kebijakan Keluarga), deklarasi iklan, ID iklan (izin AD_ID bila memakai SDK iklan/analitik), akses aplikasi, serta deklarasi khusus bila berlaku (aplikasi kesehatan, keuangan, berita, pemerintah).",
+      "rationale": "Deklarasi yang kosong atau tidak sesuai menahan rilis; aplikasi yang ternyata menampilkan iklan atau menyasar anak tanpa deklarasi dapat ditangguhkan.",
+      "inspection_check": "Periksa apakah proyek mencatat jawaban deklarasi: ada iklan atau tidak, kelompok usia sasaran, kategori khusus, dan SDK yang memakai ID iklan.",
+      "suggested_action": "Putuskan target usia dan ada/tidaknya iklan saat merancang aplikasi, lalu catat jawaban deklarasi di dokumen rilis proyek agar pengisian Play Console konsisten tiap update.",
+      "severity": "medium"
+    },
+    {
+      "id": "PLAY-012",
+      "level": "component",
+      "title": "Konten Buatan Pengguna: Lapor, Blokir, dan Moderasi",
+      "rule": "Aplikasi yang menampilkan konten buatan pengguna (posting, komentar, chat, ulasan, profil publik, unggahan media) WAJIB punya ketentuan penggunaan yang harus disetujui pengguna, tombol lapor konten dan lapor pengguna di dalam aplikasi, fitur blokir pengguna, serta moderasi yang menindak laporan. Konten berbayar atau konten dewasa mengikuti batasan tambahan kebijakan.",
+      "rationale": "Aplikasi UGC tanpa lapor/blokir ditolak, dan menambahkannya belakangan menyentuh skema data, API, serta panel admin.",
+      "inspection_check": "Bila ada fitur posting/komentar/chat, cari aksi 'Laporkan' dan 'Blokir' di layar konten dan profil, tabel/endpoint laporan di backend, serta layar moderasi di panel admin.",
+      "suggested_action": "Sertakan tabel laporan, endpoint lapor dan blokir, aksi di menu tiap konten/profil, dan antrean moderasi di panel admin bersamaan dengan fitur UGC pertama.",
+      "severity": "high"
+    },
+    {
+      "id": "PLAY-013",
+      "level": "project",
+      "title": "Listing Toko Jujur dan Aset Sesuai Spesifikasi",
+      "rule": "Listing toko memuat nama aplikasi (maks. 30 karakter), deskripsi singkat (maks. 80) dan lengkap, ikon 512x512, grafik fitur 1024x500, serta minimal dua tangkapan layar dari aplikasi yang sebenarnya. Dilarang: klaim peringkat/penghargaan tanpa bukti ('terbaik', '#1'), kata kunci berulang, testimoni di deskripsi, merek pihak lain, serta tangkapan layar yang tidak mencerminkan aplikasi. Email kontak developer aktif dan dipantau.",
+      "rationale": "Metadata menyesatkan ditolak terpisah dari kode aplikasi dan menunda rilis walau build-nya lolos.",
+      "inspection_check": "Periksa apakah proyek menyimpan aset listing (ikon, grafik fitur, tangkapan layar) dan teks listing yang ukurannya sesuai serta diambil dari build terbaru.",
+      "suggested_action": "Simpan teks dan aset listing di folder proyek, hasilkan tangkapan layar dari build nyata, dan tinjau ulang tiap perubahan tampilan besar.",
+      "severity": "medium"
+    },
+    {
+      "id": "PLAY-014",
+      "level": "component",
+      "title": "Fungsi Minimum: Stabil, Lengkap, dan Bukan Sekadar Pembungkus Web",
+      "rule": "Build yang diajukan tidak crash/ANR saat dibuka, tidak berisi layar kosong, teks placeholder, tombol tanpa aksi, atau fitur 'segera hadir' pada alur utama, dan memberi nilai lebih dari sekadar WebView yang menampilkan situs web. Server produksi yang dipakai build itu aktif selama masa tinjauan, dan aplikasi tidak mengunduh kode yang dapat dieksekusi dari luar Google Play.",
+      "rationale": "Kebijakan fungsi minimum dan perilaku menipu menolak aplikasi setengah jadi; peninjau menguji pada perangkat nyata dengan server yang harus hidup.",
+      "inspection_check": "Jalankan build rilis di perangkat nyata melewati alur utama dengan akun demo; cari layar kosong, placeholder, dan permintaan ke server pengembangan/localhost.",
+      "suggested_action": "Sembunyikan fitur yang belum selesai dari build rilis, arahkan build rilis ke server produksi, dan uji alur utama dengan akun demo sebelum mengunggah.",
+      "severity": "high"
+    }
+  ]
+}

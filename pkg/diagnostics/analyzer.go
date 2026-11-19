@@ -240,6 +240,9 @@ func inspectProjectComponent(project *models.Project, comp *models.Component) []
 		})
 	}
 
+	// Website publik: kesiapan SEO, pratinjau bagikan, dan GEO
+	findings = append(findings, inspectSEOReadiness(comp)...)
+
 	// Git status inside component
 	if getGitStatusShort(comp.AbsolutePath) != "" && (project.RootPath == "" || comp.AbsolutePath != project.RootPath) {
 		findings = append(findings, models.Finding{

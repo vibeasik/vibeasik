@@ -1,0 +1,137 @@
+{
+  "category": "frontend_seo_sosial_dan_geo",
+  "name": "SEO, Pratinjau Media Sosial & GEO (Ditemukan AI)",
+  "description": "Checklist website publik agar mudah ditemukan mesin pencari, tampil bagus saat tautannya dibagikan (WhatsApp, Facebook, X, LinkedIn, Telegram), dan mudah dibaca serta dikutip asisten AI (GEO, Generative Engine Optimization). Berlaku untuk website yang dibuka publik; panel admin dan aplikasi di balik login dikecualikan dan justru ditutup dari indeks.",
+  "guidelines": [
+    {
+      "id": "SEO-001",
+      "level": "component",
+      "title": "Judul dan Deskripsi Unik per Halaman",
+      "rule": "Setiap halaman publik WAJIB punya <title> unik (sekitar 50-60 karakter, kata kunci utama di depan, nama merek di belakang) dan meta description unik (sekitar 120-160 karakter) yang menjawab isi halaman. Halaman dinamis (produk, artikel, profil) mengisi keduanya dari datanya, bukan memakai judul situs yang sama untuk semua halaman.",
+      "rationale": "Judul dan deskripsi adalah teks yang tampil di hasil pencarian dan dipakai asisten AI saat merangkum; halaman dengan judul kembar saling bersaing dan sulit dibedakan.",
+      "inspection_check": "Pindai halaman publik untuk pemanggilan useSeoMeta/useHead/metadata; tandai halaman tanpa judul/deskripsi sendiri dan halaman dinamis yang tidak memakai data.",
+      "suggested_action": "Di Nuxt panggil useSeoMeta({ title, description }) di tiap halaman dan set titleTemplate '%s · Nama Situs' di app.vue; di Next isi export metadata/generateMetadata.",
+      "severity": "high"
+    },
+    {
+      "id": "SEO-002",
+      "level": "component",
+      "title": "Konten Publik Ter-render di HTML Server",
+      "rule": "Isi utama, judul, meta, dan data terstruktur halaman publik WAJIB sudah ada di HTML yang dikirim server (SSR atau prerender/SSG). Halaman publik tidak boleh berupa SPA kosong yang isinya baru muncul setelah JavaScript berjalan.",
+      "rationale": "Perayap media sosial dan sebagian besar perayap AI tidak menjalankan JavaScript; halaman yang dirender di klien terlihat kosong bagi mereka sehingga pratinjau tautan gagal dan isinya tidak bisa dikutip.",
+      "inspection_check": "Periksa konfigurasi (ssr: false, mode SPA) pada komponen website publik; ambil HTML mentah satu halaman (curl) dan pastikan judul serta isi utamanya ada tanpa JavaScript.",
+      "suggested_action": "Aktifkan SSR atau prerender untuk rute publik (Nuxt routeRules { prerender: true } / SSG), ambil data dengan useAsyncData/useFetch, dan biarkan hanya area di balik login yang dirender di klien.",
+      "severity": "critical"
+    },
+    {
+      "id": "SEO-003",
+      "level": "component",
+      "title": "Open Graph Lengkap agar Tautan Tampil Bagus Saat Dibagikan",
+      "rule": "Setiap halaman publik WAJIB memuat og:title, og:description, og:image, og:url, og:type, og:site_name, dan og:locale, serta twitter:card bernilai summary_large_image. Gambar og:image berukuran 1200x630 piksel (rasio 1.91:1), berformat JPG/PNG, di bawah sekitar 300 KB, memakai URL absolut https yang bisa diakses publik, dengan og:image:width, og:image:height, dan og:image:alt. Teks penting pada gambar berada di tengah agar tidak terpotong pratinjau persegi.",
+      "rationale": "Tanpa Open Graph, tautan yang dibagikan di WhatsApp, Facebook, LinkedIn, Telegram, dan X tampil sebagai URL polos tanpa gambar; gambar yang terlalu besar atau ber-URL relatif diabaikan WhatsApp.",
+      "inspection_check": "Cari og:image/ogImage dan twitter:card di konfigurasi serta halaman; periksa berkas gambar bagikan ada di folder publik dan ukurannya sesuai; pastikan URL-nya absolut.",
+      "suggested_action": "Sediakan gambar bagikan bawaan /og.jpg (1200x630) dan set bawaan situs lewat useSeoMeta({ ogTitle, ogDescription, ogImage, ogUrl, twitterCard: 'summary_large_image' }) di app.vue; halaman bisa menimpanya.",
+      "severity": "high"
+    },
+    {
+      "id": "SEO-004",
+      "level": "component",
+      "title": "Gambar Bagikan Khusus untuk Halaman Konten",
+      "rule": "Halaman yang wajar dibagikan satu per satu (produk, artikel, acara, profil, lowongan) memakai og:title, og:description, dan og:image dari datanya sendiri — foto produk/sampul atau gambar yang dibuat otomatis berisi judulnya — bukan gambar bawaan situs. Halaman artikel memakai og:type article beserta waktu terbit dan penulis.",
+      "rationale": "Pratinjau yang memperlihatkan isi halaman yang dibagikan menaikkan klik; gambar bawaan yang sama untuk semua tautan membuat penerima tidak tahu apa yang dibagikan.",
+      "inspection_check": "Periksa halaman dinamis ([id]/[slug]) apakah mengisi ogImage/ogTitle dari data yang diambil di server.",
+      "suggested_action": "Isi useSeoMeta dari hasil useAsyncData di halaman detail; bila tidak ada foto, hasilkan gambar bagikan otomatis (mis. modul nuxt-og-image) dari judul halaman.",
+      "severity": "medium"
+    },
+    {
+      "id": "SEO-005",
+      "level": "component",
+      "title": "URL Kanonis, Bahasa, dan URL Bersih",
+      "rule": "Setiap halaman publik menetapkan link rel=canonical ber-URL absolut dengan satu bentuk domain (https, dengan atau tanpa www, satu aturan garis miring akhir), atribut lang pada <html>, dan hreflang bila tersedia lebih dari satu bahasa. URL memakai slug terbaca (/produk/kopi-arabika), bukan ID mentah atau parameter query untuk konten utama. Parameter filter/urut/lacak tidak menghasilkan halaman kanonis baru.",
+      "rationale": "Konten yang sama pada beberapa URL memecah peringkat dan membingungkan perayap serta AI tentang sumber yang benar.",
+      "inspection_check": "Cari rel canonical dan htmlAttrs.lang di konfigurasi; periksa pola rute halaman konten (slug atau ID) dan pengalihan http→https serta www.",
+      "suggested_action": "Set htmlAttrs: { lang } dan canonical dari URL situs + path rute di app.vue, simpan URL situs di konfigurasi (NUXT_PUBLIC_SITE_URL), dan alihkan 301 semua varian domain ke satu bentuk.",
+      "severity": "medium"
+    },
+    {
+      "id": "SEO-006",
+      "level": "component",
+      "title": "robots.txt dan sitemap.xml Tersedia",
+      "rule": "Website publik WAJIB menyajikan /robots.txt (mengizinkan perayapan halaman publik, menutup /admin, /api, dan halaman pencarian internal, serta mencantumkan baris Sitemap) dan /sitemap.xml yang memuat semua halaman publik termasuk halaman dinamis dengan lastmod yang benar. Lingkungan staging/preview dan halaman di balik login diberi noindex agar tidak ikut terindeks.",
+      "rationale": "Tanpa sitemap, halaman dinamis yang tidak tertaut dari beranda lambat atau tidak pernah ditemukan; staging yang terindeks menjadi konten duplikat dan membocorkan fitur yang belum rilis.",
+      "inspection_check": "Periksa public/robots.txt dan public/sitemap.xml atau modul/rute pembuatnya (@nuxtjs/sitemap, @nuxtjs/robots, app/sitemap.ts); pastikan sitemap dibangun dari data, bukan daftar tetap yang usang.",
+      "suggested_action": "Pasang modul sitemap dan robots (atau rute server /sitemap.xml yang membaca data), tambahkan baris Sitemap: di robots.txt, dan beri noindex pada host non-produksi.",
+      "severity": "high"
+    },
+    {
+      "id": "SEO-007",
+      "level": "component",
+      "title": "Data Terstruktur JSON-LD (schema.org)",
+      "rule": "Halaman publik menyertakan data terstruktur JSON-LD yang sesuai isinya: Organization dan WebSite di beranda (nama, logo, url, sameAs profil resmi), LocalBusiness untuk usaha berlokasi (alamat, jam buka, telepon), Product/Offer untuk produk (harga, ketersediaan), Article untuk artikel (penulis, tanggal terbit dan diperbarui), FAQPage untuk tanya-jawab, dan BreadcrumbList untuk halaman bertingkat. Isinya sama dengan yang terlihat di halaman.",
+      "rationale": "Data terstruktur memberi mesin pencari dan asisten AI fakta yang pasti (siapa, apa, harga, kapan) sehingga layak tampil sebagai hasil kaya dan dikutip dengan benar.",
+      "inspection_check": "Cari application/ld+json atau useSchemaOrg di sumber; cocokkan jenis skema dengan jenis halaman dan uji dengan alat uji hasil kaya.",
+      "suggested_action": "Tambahkan JSON-LD lewat useHead({ script: [{ type: 'application/ld+json', innerHTML: JSON.stringify(data) }] }) atau modul schema-org, dimulai dari Organization + WebSite di beranda.",
+      "severity": "medium"
+    },
+    {
+      "id": "SEO-008",
+      "level": "component",
+      "title": "Struktur Semantik: Satu H1, Heading Berurutan, Alt Gambar",
+      "rule": "Setiap halaman publik punya tepat satu <h1> yang menyatakan topiknya, heading berurutan (h2 lalu h3, tidak dipilih demi ukuran huruf), elemen semantik (header, nav, main, article, footer), teks alt bermakna pada gambar konten, dan teks tautan yang menjelaskan tujuannya (bukan 'klik di sini'). Halaman yang tidak ada mengembalikan status 404 sungguhan, bukan halaman 200 bertuliskan tidak ditemukan.",
+      "rationale": "Struktur yang jelas adalah cara perayap dan model bahasa memahami hierarki isi; soft-404 membuat halaman kosong ikut terindeks.",
+      "inspection_check": "Hitung <h1> per halaman, cari lompatan tingkat heading, <img> tanpa alt, dan penanganan rute tak dikenal (status 404).",
+      "suggested_action": "Rapikan heading per halaman, isi alt, dan lempar createError({ statusCode: 404 }) untuk data yang tidak ditemukan.",
+      "severity": "medium"
+    },
+    {
+      "id": "SEO-009",
+      "level": "project",
+      "title": "GEO: Perayap AI Diizinkan dan Tidak Diblokir Server",
+      "rule": "Website publik yang ingin ditemukan asisten AI WAJIB mengizinkan perayap pencarian AI di robots.txt dan di lapisan server/WAF/CDN: OAI-SearchBot, ChatGPT-User, GPTBot, ClaudeBot, Claude-SearchBot, Claude-User, PerplexityBot, Perplexity-User, Google-Extended, dan Bingbot. Perlindungan bot hosting (WAF, tantangan JavaScript, captcha) tidak boleh menjawab 403/tantangan kepada perayap itu. Keputusan menutup perayap pelatihan model dicatat sebagai keputusan pemilik, terpisah dari perayap pencarian.",
+      "rationale": "Asisten AI hanya bisa mengutip halaman yang berhasil diambilnya; robots.txt yang menutup semua bot atau WAF yang menantang user-agent tak dikenal membuat situs tidak terlihat di jawaban AI walau SEO-nya baik.",
+      "inspection_check": "Baca robots.txt untuk Disallow terhadap user-agent AI; setelah deploy, ambil beranda dengan user-agent perayap AI dan periksa statusnya 200 serta isinya utuh.",
+      "suggested_action": "Tulis aturan Allow eksplisit untuk perayap AI di robots.txt, masukkan mereka ke daftar izin WAF/hosting, dan sertakan pemeriksaan curl -A per perayap dalam langkah pasca-deploy.",
+      "severity": "high"
+    },
+    {
+      "id": "SEO-010",
+      "level": "component",
+      "title": "GEO: llms.txt dan Ringkasan Situs untuk AI",
+      "rule": "Website publik menyediakan /llms.txt berformat Markdown di root: judul situs, satu paragraf ringkasan tentang siapa dan apa yang ditawarkan, lalu daftar tautan halaman terpenting beserta keterangan satu baris (layanan, harga, dokumentasi, kontak, FAQ). Isinya diperbarui saat halaman utama berubah. llms.txt adalah konvensi yang masih berkembang dan melengkapi, bukan menggantikan, sitemap dan konten yang baik.",
+      "rationale": "Ringkasan terkurasi memberi asisten AI peta situs yang ringkas dan akurat dengan biaya sangat kecil, daripada menebak dari navigasi.",
+      "inspection_check": "Periksa public/llms.txt atau rute server pembuatnya; pastikan tautannya hidup dan ringkasannya sesuai isi situs saat ini.",
+      "suggested_action": "Buat public/llms.txt (atau rute server yang menyusunnya dari data halaman) dan masukkan pembaruannya ke daftar periksa rilis konten.",
+      "severity": "low"
+    },
+    {
+      "id": "SEO-011",
+      "level": "component",
+      "title": "GEO: Konten Mudah Dikutip (Jawaban Dulu, Fakta Jelas)",
+      "rule": "Halaman informasi ditulis agar bisa dikutip utuh: kalimat pembuka langsung menjawab pertanyaan halaman, heading berbentuk pertanyaan atau topik yang dicari orang, fakta konkret (angka, harga, satuan, tanggal, lokasi) ditulis sebagai teks — bukan di dalam gambar — dan tiap bagian bisa dipahami tanpa bagian lain. Sertakan bagian tanya-jawab (FAQ), tanggal diperbarui, penulis/penanggung jawab, serta halaman Tentang dan Kontak dengan nama, alamat, dan kontak yang konsisten dengan profil resmi di tempat lain.",
+      "rationale": "Asisten AI mengambil potongan teks yang berdiri sendiri dan memilih sumber yang jelas siapa pemiliknya serta kapan diperbarui; teks di dalam gambar dan kalimat promosi tanpa fakta tidak pernah dikutip.",
+      "inspection_check": "Baca halaman layanan/produk/artikel: apakah paragraf pertama menjawab pertanyaannya, apakah harga/spesifikasi berupa teks, apakah ada FAQ, tanggal pembaruan, dan identitas pemilik situs.",
+      "suggested_action": "Tulis ulang pembuka halaman menjadi jawaban langsung, pindahkan fakta dari gambar ke teks/tabel, tambahkan FAQ ber-skema FAQPage, dan tampilkan tanggal diperbarui.",
+      "severity": "medium"
+    },
+    {
+      "id": "SEO-012",
+      "level": "component",
+      "title": "Ikon Situs, Manifest, dan Warna Tema",
+      "rule": "Website menyediakan favicon (ICO/SVG dan PNG 32x32), apple-touch-icon 180x180, web manifest dengan nama, ikon 192 dan 512, serta theme-color, dan logo yang sama dipakai di data terstruktur Organization.",
+      "rationale": "Ikon tampil di tab, hasil pencarian, layar utama ponsel, dan sebagian pratinjau tautan; ikon bawaan kerangka kerja menandakan situs belum selesai.",
+      "inspection_check": "Periksa folder publik untuk favicon, apple-touch-icon, dan manifest; pastikan bukan ikon bawaan kerangka kerja.",
+      "suggested_action": "Hasilkan set ikon dari logo, taruh di folder publik, dan tautkan lewat app.head di konfigurasi.",
+      "severity": "low"
+    },
+    {
+      "id": "SEO-013",
+      "level": "project",
+      "title": "Verifikasi Pasca-Deploy: Indeks, Pratinjau Bagikan, dan Akses AI",
+      "rule": "Setelah website tayang di domain produksi, lakukan dan catat: (1) daftarkan domain dan kirim sitemap ke Google Search Console dan Bing Webmaster Tools (indeks Bing dipakai beberapa asisten AI); (2) uji pratinjau tautan beranda dan satu halaman konten dengan alat debug bagikan (Facebook Sharing Debugger, LinkedIn Post Inspector) dan kirim tautannya ke WhatsApp/Telegram; (3) uji data terstruktur dengan alat uji hasil kaya; (4) ambil halaman dengan user-agent perayap pencarian dan AI untuk memastikan status 200; (5) periksa Core Web Vitals halaman utama.",
+      "rationale": "Meta yang benar di kode belum membuktikan hasilnya: cache pratinjau lama, WAF hosting, dan pengalihan domain hanya terlihat setelah deploy.",
+      "inspection_check": "Periksa apakah skrip/daftar periksa deploy proyek memuat langkah verifikasi SEO dan apakah hasil terakhirnya dicatat.",
+      "suggested_action": "Tambahkan langkah verifikasi ini ke daftar periksa pasca-deploy proyek, dan ulangi uji pratinjau setiap gambar atau judul bagikan diubah (alat debug juga menyegarkan cache).",
+      "severity": "medium"
+    }
+  ]
+}
