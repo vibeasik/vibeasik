@@ -14,6 +14,7 @@ var ProCatalog = []CatalogRoute{
 	{"PUT", "/projects/:id/profile", "audit.ai_review"},
 	{"POST", "/projects/:id/profile/generate", "audit.ai_review"},
 	{"GET", "/projects/:id/profile/prompt", "audit.ai_review"},
+	{"POST", "/projects/:id/doc-notes/generate", "audit.ai_review"},
 	{"GET", "/projects/:id/base-knowledge", "audit.ai_review"},
 	{"POST", "/projects/:id/base-knowledge/refresh", "audit.ai_review"},
 	{"POST", "/projects/:id/chat", "audit.ai_review"},

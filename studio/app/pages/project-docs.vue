@@ -194,6 +194,7 @@ const sourcesMissing = computed(() => doc.sources.filter(s => s.state !== 'ok').
       :content="doc.notes"
       :saving="doc.savingNotes"
       :save="saveNotes"
+      :generate="doc.generateNotes"
     />
   </div>
 </template>

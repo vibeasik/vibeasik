@@ -6,7 +6,12 @@
 import type { ProjectDocContent } from '~/utils/projectDocLabels'
 import { DOC_ADR_STATUS, emptyDocContent } from '~/utils/projectDocLabels'
 
-const props = defineProps<{ content: ProjectDocContent, saving: boolean, save: (c: ProjectDocContent) => Promise<void> }>()
+const props = defineProps<{
+  content: ProjectDocContent
+  saving: boolean
+  save: (c: ProjectDocContent) => Promise<void>
+  generate?: () => Promise<{ content: ProjectDocContent, model: string }>
+}>()
 const open = defineModel<boolean>('open', { default: false })
 const tab = defineModel<string>('tab', { default: 'umum' })
 
@@ -29,7 +34,59 @@ watch(open, (v) => {
   if (!v) return
   draft.value = JSON.parse(JSON.stringify({ ...emptyDocContent(), ...props.content }))
   error.value = ''
+  aiNote.value = ''
 }, { immediate: true })
+
+// Isi otomatis: model aktif di navbar menyusun draf dari bukti proyek; hasilnya hanya masuk ke salinan kerja.
+const { selectedModel, modelLabel } = useLLMState()
+const activeModel = computed(() => selectedModel.value ? modelLabel(selectedModel.value) : '')
+const generating = ref(false)
+const aiNote = ref('')
+
+const key = (v: string) => v.trim().toLowerCase()
+// Gabungkan daftar tanpa duplikat (berdasarkan judul/istilah); mengembalikan jumlah butir baru.
+function mergeList<T>(into: T[], add: T[], keyOf: (x: T) => string) {
+  const seen = new Set(into.map(x => key(keyOf(x))))
+  let n = 0
+  for (const x of add) {
+    const k = key(keyOf(x))
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    into.push(x)
+    n++
+  }
+  return n
+}
+
+const autofill = async () => {
+  if (!props.generate) return
+  generating.value = true
+  error.value = ''
+  aiNote.value = ''
+  try {
+    const { content: g, model } = await props.generate()
+    const d = draft.value
+    let added = 0
+    // Latar belakang tulisan pemilik tidak ditimpa: draf hanya mengisi yang masih kosong.
+    if (g.background && !d.background.trim()) {
+      d.background = g.background
+      added++
+    }
+    added += mergeList(d.out_of_scope, g.out_of_scope || [], x => x)
+    added += mergeList(d.non_functional, g.non_functional || [], x => x.name)
+    added += mergeList(d.decisions, (g.decisions || []).map(x => ({ ...x, date: x.date || today() })), x => x.title)
+    added += mergeList(d.glossary, g.glossary || [], x => x.term)
+    aiNote.value = added
+      ? `${added} isian baru dari ${modelLabel(model) || 'LLM'}. Periksa tiap tab, lalu Simpan.`
+      : `${modelLabel(model) || 'LLM'} tidak menemukan isian baru di luar yang sudah ada.`
+  } catch (err: any) {
+    error.value = err?.statusCode === 402 || err?.status === 402
+      ? 'Isi otomatis dengan AI butuh paket Pro (atau proyek ini belum masuk pengawasan penuh).'
+      : err?.data?.error || err?.message || 'LLM gagal menyusun draf'
+  } finally {
+    generating.value = false
+  }
+}
 
 const addDecision = () => draft.value.decisions.push({ title: '', date: today(), status: 'proposed', context: '', decision: '', consequences: '' })
 const addChange = () => draft.value.changelog.unshift({ version: draft.value.version || '', date: today(), changes: '' })
@@ -57,6 +114,19 @@ const CARD = 'rounded-xl border border-neutral-200 dark:border-white/[0.08] p-3 
   >
     <template #body>
       <div class="space-y-4 text-sm">
+        <div v-if="generate" class="flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 dark:border-white/[0.08] px-3 py-2">
+          <UIcon name="i-lucide-sparkles" class="size-4 text-neutral-500" />
+          <p class="flex-1 min-w-0 text-xs text-neutral-600 dark:text-slate-400">
+            Susun draf latar belakang, lingkup, mutu, keputusan, dan glosarium dari kode proyek<template v-if="activeModel">
+              dengan <span class="font-medium text-neutral-900 dark:text-white">{{ activeModel }}</span>
+            </template>.
+          </p>
+          <UButton size="xs" color="neutral" icon="i-lucide-sparkles" :loading="generating" :disabled="saving" @click="autofill">
+            {{ generating ? 'Menyusun…' : 'Isi dengan AI' }}
+          </UButton>
+        </div>
+        <UAlert v-if="aiNote" color="info" variant="subtle" icon="i-lucide-info" :description="aiNote" />
+
         <div class="flex gap-1 overflow-x-auto no-scrollbar pb-3 border-b border-neutral-200 dark:border-white/[0.07]">
           <button
             v-for="t in TABS"

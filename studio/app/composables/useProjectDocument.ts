@@ -206,6 +206,13 @@ export function useProjectDocument(projectId: Ref<number | null>) {
     }
   }
 
+  // Draf catatan dari LLM aktif (fitur Pro). Tidak disimpan: hasilnya dimasukkan ke editor untuk diperiksa.
+  const generateNotes = async (): Promise<{ content: ProjectDocContent, model: string }> => {
+    const pid = projectId.value
+    if (!pid) throw new Error('Pilih proyek dulu')
+    return await $fetch<{ content: ProjectDocContent, model: string }>(`${notesUrl(pid)}/generate`, { method: 'POST' })
+  }
+
   // ---------- Turunan untuk bagian dokumen ----------
   // Path aplikasi relatif terhadap folder proyek (relative_path sering kosong bila hanya absolute_path yang tercatat).
   const components = computed(() => {
@@ -283,7 +290,7 @@ export function useProjectDocument(projectId: Ref<number | null>) {
 
   return {
     project, profile, knowledge, overview, runtime, securityReport, audit, entrySnippets, sources,
-    notes, notesUpdatedAt, savingNotes, saveNotes,
+    notes, notesUpdatedAt, savingNotes, saveNotes, generateNotes,
     loading, error, loadedAt, load,
     components, stack, testFiles, testCaseCount, testRatio, routes, backendRoutes, pageRoutes, curlExample
   }
