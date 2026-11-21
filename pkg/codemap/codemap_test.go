@@ -77,6 +77,8 @@ const { info } = useTodoImpact()
 `,
 		"fe/app/pages/todos/[id].vue": "<template><TodosImpactBadge :todo=\"t\" /></template>\n",
 		"fe/node_modules/x/index.js":  "export const ignored = 1\n",
+		// _nuxt di bawah folder publik (bukan di dalam dist/.output) harus tetap dilewati.
+		"fe/public/_nuxt/entry.aBc123.js": "export const ignored = 2\n",
 	})
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {

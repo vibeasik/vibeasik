@@ -39,6 +39,10 @@ var ignoredDirs = map[string]bool{
 	".cache": true, "tmp": true, ".vscode": true, ".idea": true, "coverage": true, ".dart_tool": true, ".next": true, ".svelte-kit": true,
 	"__pycache__": true, ".venv": true, "venv": true, "target": true, ".gradle": true, "Pods": true, ".pub-cache": true, ".turbo": true,
 	".vibeasik": true, "storage": true, ".expo": true, "out": true, ".logs": true, ".pids": true,
+	// _nuxt = folder aset hasil build Nuxt di dalam folder publik/statis yang di-commit atau
+	// disalin sendiri; isinya js/css/font ter-minify, bukan sumber. Berbeda dari ".nuxt"
+	// (cache dev) dan ".output" (folder build), jadi perlu disebut terpisah.
+	"_nuxt": true,
 }
 
 var generatedFile = regexp.MustCompile(`(\.pb\.go|\.g\.dart|\.freezed\.dart|\.gen\.go|_generated\.\w+|\.min\.(js|css)|\.d\.ts\.map|-lock\.json|\.lock)$`)
