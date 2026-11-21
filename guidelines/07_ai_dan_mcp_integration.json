@@ -1,7 +1,7 @@
 {
   "category": "ai_dan_mcp_integration",
   "name": "Standar Integrasi AI Agent, System One & MCP",
-  "description": "Pedoman protokol konteks AI, drop-in primitives Jev, dan observabilitas agent",
+  "description": "Pedoman protokol konteks AI, drop-in primitives Jev, observabilitas agent, dan kunci agent AI",
   "guidelines": [
     {
       "id": "AI-001",
@@ -22,6 +22,16 @@
       "inspection_check": "Periksa penggunaan library HTTP client System One dan validasi payload primitif.",
       "suggested_action": "Suntikkan template System One client via vibeasik_inject_ai_template.",
       "severity": "medium"
+    },
+    {
+      "id": "AI-003",
+      "level": "project",
+      "title": "Kunci Agent AI: Akses Mesin-ke-Mesin yang Bisa Dinyalakan/Dimatikan & Terdokumentasi",
+      "rule": "Setiap aplikasi yang punya backend atau panel admin wajib menyediakan jalur kunci agent AI: AI coding agent milik pemilik mengakses data operasional (laporan galat, masukan pengguna, rekap agregat) lewat request yang ditandatangani kunci asimetris Ed25519 di laptop pemilik — tanpa sandi, cookie, atau token tersimpan. Wajib ada: (1) sakelar utama aktif/nonaktif di panel admin, bawaan nonaktif dan fail closed bila pengaturan tidak terbaca; (2) pendaftaran & pencabutan kunci publik di panel dengan izin per kunci (baca / baca & tandai) yang berlaku seketika; (3) amplop tanda tangan berisi namespace aplikasi, method, path, query, timestamp, nonce sekali pakai, dan sha256(body); (4) cakupan sempit: tanpa hapus, tanpa identitas pengguna, teks bebas diredaksi; (5) rate limit dan log audit tiap request agent; (6) server MCP stdio yang meneruskan tool ke jalur itu dan terdaftar di konfigurasi agent; (7) dokumentasi docs/KUNCI_AGENT.md plus tutorial pemasangan MCP di halaman kunci agent panel admin.",
+      "rationale": "Agent coding paling efektif bila bisa membaca galat dan masukan produksi langsung lalu menandainya setelah diperbaiki. Memakai sandi panel atau token panjang di konfigurasi agent membuka risiko kebocoran dan akses berlebih; kunci Ed25519 + sakelar + cakupan sempit memberi akses yang bisa diaudit, dicabut, dan dimatikan kapan saja oleh pemilik.",
+      "inspection_check": "Cek docs/KUNCI_AGENT.md (atau docs/AGENT_KEY.md) di root proyek memuat daftar tool MCP & izinnya, sakelar, dan tutorial pemasangan; registrasi MCP di .mcp.json / .vscode/mcp.json / .cursor/mcp.json; rute jalur agent menjawab 401 tanpa tanda tangan sah dan 403 saat sakelar mati; tes ujung-ke-ujung klien MCP → HTTP bertanda tangan → backend; tidak ada rute hapus atau data pribadi di jalur agent.",
+      "suggested_action": "Ikuti docs/AGENT_KEY.md di repo vibeasik: buat paket tanda tangan bersama (server & klien), katalog tool satu sumber, grup rute /agent dengan rate limit → sakelar → verifikasi, halaman Kunci agent di panel (sakelar, kunci, tabel tool, tutorial MCP bertombol salin), CLI + `<cli> mcp`, .mcp.json, dan docs/KUNCI_AGENT.md.",
+      "severity": "high"
     }
   ]
 }

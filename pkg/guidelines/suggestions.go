@@ -96,9 +96,11 @@ func GenerateSuggestionsForProject(project *models.Project, allProjects []models
 	// 1. ARCH-002 (dev.sh) & DEV-007 (deploy.sh): saran todo dari audit Aturan 45, diagnostics.DefaultProjectTodos
 	//    dipanggil POST /api/todos/suggest (paket diagnostics mengimpor guidelines, jadi tidak di sini).
 
-	// 2. Level Project: hygiene .env.example (SEC-002), .gitignore (SEC-001), AI_CONTEXT.md (AI-002)
+	// 2. Level Project: hygiene .env.example (SEC-002), .gitignore (SEC-001), AI_CONTEXT.md (AI-002),
+	//    kunci agent AI (AI-003)
 	if hasRealRoot(project) {
 		suggestions = append(suggestions, projectHygieneSuggestions(project, allAppsLabel)...)
+		suggestions = append(suggestions, agentKeySuggestions(project, allAppsLabel)...)
 	}
 	// 3. Security Cross-Component Check: CORS & Origin Whitelist (SEC-004)
 	if beComp != nil && feComp != nil {
@@ -145,6 +147,38 @@ func projectHygieneSuggestions(project *models.Project, label string) []models.T
 		}))
 	}
 	return out
+}
+
+// agentKeyDocs: dokumen standar kunci agent AI (AI-003) yang dicari di root proyek.
+var agentKeyDocs = []string{"docs/KUNCI_AGENT.md", "docs/AGENT_KEY.md"}
+
+// agentKeySuggestions: proyek dengan backend wajib punya jalur kunci agent AI yang terdokumentasi (AI-003).
+func agentKeySuggestions(project *models.Project, label string) []models.Todo {
+	if !projectHasBackend(project) {
+		return nil
+	}
+	for _, doc := range agentKeyDocs {
+		if fileExists(filepath.Join(project.RootPath, doc)) {
+			return nil
+		}
+	}
+	return []models.Todo{advisorTodo(project, nil, label, advice{
+		level: models.TodoLevelProject, category: models.CategorySecurity, priority: models.TodoPriorityHigh, ref: "AI-003",
+		title: fmt.Sprintf("Sediakan kunci agent AI (Ed25519 + MCP) yang bisa dinyalakan/dimatikan untuk %s", project.Name),
+		desc: "Bangun jalur agent: request ditandatangani kunci Ed25519 pemilik, sakelar aktif/nonaktif di panel admin (bawaan nonaktif), " +
+			"izin per kunci baca / baca & tandai, pencabutan seketika, cakupan tanpa hapus & tanpa data pribadi, rate limit + log audit, " +
+			"server MCP stdio, serta docs/KUNCI_AGENT.md dan tutorial MCP di halaman kunci agent panel. Rujukan: docs/AGENT_KEY.md vibeasik.",
+		why: "Patokan: [AI-003] Agent coding membaca galat & masukan produksi lewat kunci yang bisa diaudit, dicabut, dan dimatikan pemilik — bukan sandi panel atau token tersimpan.",
+	})}
+}
+
+func projectHasBackend(p *models.Project) bool {
+	for i := range p.Components {
+		if p.Components[i].Role == models.RoleBackend {
+			return true
+		}
+	}
+	return false
 }
 
 func corsSuggestion(project *models.Project, be, fe *models.Component) models.Todo {

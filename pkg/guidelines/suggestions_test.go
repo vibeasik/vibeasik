@@ -50,7 +50,7 @@ func TestGenerateSuggestionsForProjectGolden(t *testing.T) {
 		}},
 		{"bundle_lengkap", func(t *testing.T) *models.Project {
 			root, be, fe := t.TempDir(), t.TempDir(), t.TempDir()
-			writeFiles(t, root, ".env", ".env.example", ".gitignore", "AI_CONTEXT.md", "CHANGELOG.md", "Dockerfile")
+			writeFiles(t, root, ".env", ".env.example", ".gitignore", "AI_CONTEXT.md", "CHANGELOG.md", "Dockerfile", "docs/AGENT_KEY.md")
 			writeFiles(t, be, "internal/x_test.go")
 			writeFiles(t, fe, "composables/useApi.ts", "a.spec.ts")
 			return &models.Project{ID: 3, Name: "Lengkap", RootPath: root, Components: []models.Component{

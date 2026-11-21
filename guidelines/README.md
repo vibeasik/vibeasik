@@ -22,7 +22,7 @@ Berkas-berkas dalam folder ini dikelompokkan berdasarkan domain agar mudah dimai
 | `04_frontend_dan_antarmuka.json`| `frontend_dan_antarmuka`| Typed composables, antislop UI, responsivitas mobile |
 | `05_keamanan_dan_hygiene.json` | `keamanan_dan_hygiene` | Zero-credential leak, .env sanitization, pre-flight AI censor |
 | `06_performa_dan_jaringan.json` | `performa_dan_jaringan` | Zero port collision, LAN binding (0.0.0.0) |
-| `07_ai_dan_mcp_integration.json`| `ai_dan_mcp_integration`| Model Context Protocol (MCP), System One / Jev primitives |
+| `07_ai_dan_mcp_integration.json`| `ai_dan_mcp_integration`| Model Context Protocol (MCP), System One / Jev primitives, kunci agent AI (`docs/AGENT_KEY.md`) |
 | `08_scale_up_architecture_patterns.json` | `scale_up_arsitektur_backend` | Thin Controller, Pure vs Struct, Repository Abstraction, MCP, MVPP |
 | `09_mobile_dan_cross_platform.json` | `mobile_dan_cross_platform` | UI Thread, Memory Leak, Offline Handling, Encrypted Storage |
 | `10_testing_dan_quality_assurance.json` | `testing_dan_quality_assurance` | Unit test coverage, integration test, test isolation, regression test |

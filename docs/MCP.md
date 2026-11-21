@@ -79,3 +79,9 @@ bahasa biasa.
 | `401` / "token" dari MCP HTTP | Kirim header `X-Vibeasik-Token`; ambil nilai dari `vibeasik token`. Setelah `token --rotate`, perbarui konfigurasi |
 | Tool menjawab "upgrade_required" | Fitur itu bagian paket Pro. `vibeasik whoami` menampilkan fitur aktif Anda |
 | Studio atau MCP HTTP tidak bisa dibuka | Jalankan `vibeasik serve`; keduanya dilayani oleh engine |
+
+## Aplikasi Anda juga wajib punya MCP: kunci agent AI
+
+vibeasik sendiri adalah server MCP, dan aplikasi yang Anda bangun pun wajib membuka data operasionalnya
+(galat, masukan, rekap) ke agent coding lewat **kunci agent AI** yang bisa dinyalakan/dimatikan dan
+terdokumentasi — patokan `AI-003`. Spesifikasi, tool minimal, tutorial, dan tes wajib: [AGENT_KEY.md](AGENT_KEY.md).
