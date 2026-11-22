@@ -127,6 +127,9 @@ type AgentRun struct {
 	ReadOnly bool `gorm:"default:false" json:"read_only,omitempty"`
 	// ShowTerminal: buka jendela terminal di laptop untuk run ini walau pengaturan global show_terminal mati.
 	ShowTerminal bool `gorm:"default:false" json:"show_terminal,omitempty"`
+	// RequireCritical: run ini wajib dikerjakan model kritis (sama dengan todo QA/security) walau read-only tanpa
+	// todo, mis. pemeriksaan yang hasilnya disimpan sebagai pengetahuan.
+	RequireCritical bool `gorm:"default:false" json:"require_critical,omitempty"`
 	// WaitReason: alasan run masih antre (diisi penjadwal di memori, tidak disimpan)
 	WaitReason string `gorm:"-" json:"wait_reason,omitempty"`
 }
@@ -175,6 +178,8 @@ type AgentDispatchRequest struct {
 	TimeoutMin   int    `json:"timeout_min"`
 	ReadOnly     bool   `json:"read_only"`     // pemeriksaan tanpa mengubah berkas (tanpa worktree/merge)
 	ShowTerminal bool   `json:"show_terminal"` // paksa jendela terminal di laptop untuk run ini
+	// RequireCritical: wajib model kritis (profil Claude Code dinaikkan otomatis), walau read-only tanpa todo
+	RequireCritical bool `json:"require_critical"`
 }
 
 // AgentBatchDispatchRequest mengirim banyak todo sekaligus ke orkestrator (tombol "Suruh Agent Otomatis").
