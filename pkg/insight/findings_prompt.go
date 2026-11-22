@@ -108,7 +108,8 @@ func findingsTodoPromptText(p models.Project, s FindingScope, advisory int) stri
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Jadikan todo temuan %s proyek \"%s\" (project ID %d) lewat MCP vibeasik.\n", s.Label, p.Name, p.ID)
-	b.WriteString("Kerjakan sendiri dengan membaca kodenya: jangan memakai LLM luar, jangan menjalankan scan/audit ulang, dan jangan mengubah kode aplikasi — tugas ini hanya memeriksa temuan lalu membuat todo.\n\n")
+	b.WriteString("Kerjakan sendiri dengan membaca kodenya: jangan memakai LLM luar, jangan menjalankan scan/audit ulang, dan jangan mengubah kode aplikasi — tugas ini hanya memeriksa temuan lalu membuat todo.\n")
+	b.WriteString("Model: cukup kelas menengah (Claude Code: Sonnet; agent lain: model setara, mis. claude-sonnet di Antigravity) — brief triase vibeasik sudah memuat apa yang harus dibuktikan; Opus dan Fable tidak diperlukan.\n\n")
 	fmt.Fprintf(&b, "1. Panggil `vibeasik_audit_triage_brief` {%s}. Hasilnya: kelompok temuan terbuka per rule + berkas, apa yang harus dibuktikan (must_verify), rekam jejak false positive rule itu, dan todo terbuka yang akan digabung.\n", filter)
 	b.WriteString("2. Untuk tiap kelompok, baca berkas di baris yang disebut beserta pemanggil/rutenya. Putuskan `confirmed` bila masalahnya nyata, `false_positive` bila tidak.\n")
 	b.WriteString("3. Kirim keputusan lewat `vibeasik_audit_triage_submit` {project_id, agent: \"<nama agent & model>\", decisions}. `confirmed` wajib membawa resolution (todo_title, target_file, target_lines, code_before disalin persis dari berkas, code_after, action_steps); `false_positive` membawa reason + evidence (kutipan baris dari berkas).\n")
