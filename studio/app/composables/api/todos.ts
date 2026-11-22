@@ -16,7 +16,11 @@ export const useTodosApi = () => {
     }
   }
 
-  const getTodos = async (params?: { project_id?: number, component_id?: number, level?: string, category?: string, status?: string, source?: string, is_ai_suggestion?: boolean, limit?: number, offset?: number }): Promise<Todo[]> => {
+  type TodoListParams = { project_id?: number, component_id?: number, level?: string, category?: string, status?: string, source?: string, is_ai_suggestion?: boolean, limit?: number, offset?: number }
+
+  // Daftar todo + jumlah per status dari respons yang SAMA. Halaman yang bisa memuat ulang bersamaan
+  // (ganti proyek saat muatan lama belum selesai) memakai ini agar rekap & daftar tidak berasal dari proyek berbeda.
+  const getTodosWithCounts = async (params?: TodoListParams): Promise<{ todos: Todo[], counts: Record<string, number> | null }> => {
     const query = new URLSearchParams()
     if (params?.project_id) query.append('project_id', String(params.project_id))
     if (params?.component_id) query.append('component_id', String(params.component_id))
@@ -30,8 +34,13 @@ export const useTodosApi = () => {
     const url = `${apiBase}/api/todos${query.toString() ? '?' + query.toString() : ''}`
     const res = await $fetch.raw<Todo[]>(url)
     // Jumlah per status tanpa batas halaman (header engine); dipakai rekap agar tidak hanya menghitung baris termuat.
-    lastTodoStatusCounts.value = parseStatusCounts(res.headers.get('X-Todo-Status-Counts'))
-    return res._data || []
+    return { todos: res._data || [], counts: parseStatusCounts(res.headers.get('X-Todo-Status-Counts')) }
+  }
+
+  const getTodos = async (params?: TodoListParams): Promise<Todo[]> => {
+    const { todos, counts } = await getTodosWithCounts(params)
+    lastTodoStatusCounts.value = counts
+    return todos
   }
 
   const getTodo = async (id: number): Promise<Todo> => {
@@ -130,6 +139,7 @@ export const useTodosApi = () => {
 
   return {
     getTodos,
+    getTodosWithCounts,
     lastTodoStatusCounts,
     getTodo,
     createTodo,

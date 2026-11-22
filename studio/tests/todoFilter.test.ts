@@ -182,6 +182,7 @@ describe('todoFilter - Table-Driven Predicate Boundary Tests (K64, K4698)', () =
       expect(matchesStatusFilter(createMockTodo({ status: 'suggested' }), 'uncompleted')).toBe(true)
       expect(matchesStatusFilter(createMockTodo({ status: 'completed' }), 'uncompleted')).toBe(false)
       expect(matchesStatusFilter(createMockTodo({ status: 'rejected' }), 'uncompleted')).toBe(false)
+      expect(matchesStatusFilter(createMockTodo({ status: 'split' }), 'uncompleted')).toBe(false)
     })
 
     test('filter all atau kosong meloloskan semua status', () => {

@@ -5,7 +5,7 @@ definePageMeta({
   fluid: true
 })
 
-const { getTodos, getGuidelines, lastTodoStatusCounts } = useApi()
+const { getTodosWithCounts, getGuidelines } = useApi()
 
 const {
   activeProjectId,
@@ -18,6 +18,8 @@ const {
 const { initing: initingProject, initProject } = useInitVibeasik()
 
 const todos = ref<Todo[]>([])
+// Jumlah per status (tanpa batas halaman) milik proyek yang sama dengan `todos`.
+const statusCounts = ref<{ projectId: number | null, counts: Record<string, number> } | null>(null)
 const guidelines = ref<GuidelineCategory[]>([])
 const loading = ref(true)
 
@@ -47,7 +49,7 @@ const pendingAISuggestionsCount = computed(() => {
 })
 
 const remainingTasksCount = computed(() => {
-  return workTodos.value.filter(t => t.status !== 'completed' && t.status !== 'rejected').length
+  return workTodos.value.filter(t => t.status !== 'completed' && t.status !== 'rejected' && t.status !== 'split').length
 })
 
 // Modals
@@ -56,10 +58,11 @@ const openGuidelinesDrawer = () => {
   guidelinesDrawerOpen.value = true
 }
 
-let loadingDataInProgress = false
+// Muatan terbaru yang menang: memuat ulang saat muatan lama belum selesai (mis. ganti proyek) tidak boleh
+// dibuang, dan respons lama yang datang belakangan tidak boleh menimpa data proyek yang sedang dibuka.
+let loadSeq = 0
 const loadData = async () => {
-  if (loadingDataInProgress) return
-  loadingDataInProgress = true
+  const seq = ++loadSeq
   loading.value = true
   try {
     await fetchProjects()
@@ -71,22 +74,31 @@ const loadData = async () => {
 
     const targetProjectId = activeProjectId.value || (projects.value.length > 0 ? projects.value[0]?.id : undefined)
 
-    const [tList, gList] = await Promise.all([
+    const [tRes, gList] = await Promise.all([
       // Batas maksimum server (200); todo terbuka selalu didahulukan, sisanya todo selesai terbaru.
-      getTodos(targetProjectId ? { project_id: targetProjectId, limit: 200 } : { limit: 200 }),
+      getTodosWithCounts(targetProjectId ? { project_id: targetProjectId, limit: 200 } : { limit: 200 }),
       guidelines.value.length === 0 ? getGuidelines() : Promise.resolve(guidelines.value)
     ])
-    todos.value = tList || []
+    if (seq !== loadSeq) return
+    todos.value = tRes.todos
+    statusCounts.value = tRes.counts ? { projectId: targetProjectId ?? null, counts: tRes.counts } : null
     if (gList) {
       guidelines.value = gList
     }
   } catch (err) {
-    console.error('Failed to load todos data:', err)
+    if (seq === loadSeq) console.error('Failed to load todos data:', err)
   } finally {
-    loading.value = false
-    loadingDataInProgress = false
+    if (seq === loadSeq) loading.value = false
   }
 }
+
+// Rekap hanya memakai hitungan engine bila milik proyek aktif; selain itu jatuh ke hitungan baris termuat.
+const activeStatusCounts = computed(() => {
+  const sc = statusCounts.value
+  if (!sc) return null
+  if (activeProjectId.value && sc.projectId !== activeProjectId.value) return null
+  return sc.counts
+})
 
 // Filter, urutan & paginasi (state di composable)
 const {
@@ -183,7 +195,7 @@ const { handleApprove, handleReject, handleSplit, handleUpdateStatus, handleDele
     <!-- Stats Header Cards (Rekap Atas: Sisa tugas belum selesai & status rincian proyek aktif) -->
     <TodosTodoStatsHeader
       :todos="workTodos"
-      :counts="lastTodoStatusCounts"
+      :counts="activeStatusCounts"
       :project-name="activeProject?.name"
       @filter-status="setStatus"
     />
@@ -223,7 +235,7 @@ const { handleApprove, handleReject, handleSplit, handleUpdateStatus, handleDele
       v-model:order-by="selectedOrderBy"
       v-model:search="searchQuery"
       :filtered-count="filteredTodos.length"
-      :total-count="lastTodoStatusCounts ? Object.values(lastTodoStatusCounts).reduce((a, b) => a + b, 0) : workTodos.length"
+      :total-count="activeStatusCounts ? Object.values(activeStatusCounts).reduce((a, b) => a + b, 0) : workTodos.length"
     />
 
     <!-- Loading State Skeleton -->

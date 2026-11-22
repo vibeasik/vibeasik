@@ -109,7 +109,8 @@ export const matchesEmployeeFilter = (t: Todo, employee: string): boolean => {
 export const matchesStatusFilter = (t: Todo, status: string): boolean => {
   if (!status || status === 'all') return true
   if (status === 'uncompleted') {
-    return t.status !== 'completed' && t.status !== 'rejected'
+    // Induk 'split' dikerjakan lewat sub todonya; tampil di filter "Semua", tidak dihitung sebagai sisa.
+    return t.status !== 'completed' && t.status !== 'rejected' && t.status !== 'split'
   }
   return t.status === status
 }

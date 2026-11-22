@@ -16,7 +16,8 @@ const stats = computed(() => {
   const c = props.counts
   if (c) {
     const n = (k: string) => c[k] || 0
-    const total = Object.values(c).reduce((a, b) => a + b, 0)
+    // Induk 'split' bukan satuan kerja (dikerjakan lewat sub todonya), jadi tidak ikut dihitung.
+    const total = Object.entries(c).reduce((a, [k, v]) => k === 'split' ? a : a + v, 0)
     const completedCount = n('completed')
     const rejectedCount = n('rejected')
     return {
@@ -30,11 +31,12 @@ const stats = computed(() => {
       completionPercent: total > 0 ? Math.round((completedCount / total) * 100) : 0
     }
   }
-  const total = props.todos.length
+  const units = props.todos.filter(t => t.status !== 'split')
+  const total = units.length
   const completedCount = props.todos.filter(t => t.status === 'completed').length
   const rejectedCount = props.todos.filter(t => t.status === 'rejected').length
   // Sisa tugas yang harus dikerjakan: segala status yang belum selesai dan belum ditolak
-  const remainingCount = props.todos.filter(t => t.status !== 'completed' && t.status !== 'rejected').length
+  const remainingCount = units.filter(t => t.status !== 'completed' && t.status !== 'rejected').length
   const inProgressCount = props.todos.filter(t => t.status === 'in_progress').length
   const pendingCount = props.todos.filter(t => t.status === 'pending').length
   const suggestedCount = props.todos.filter(t => t.status === 'suggested').length
