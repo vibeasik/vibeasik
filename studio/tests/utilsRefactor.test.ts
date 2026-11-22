@@ -32,8 +32,9 @@ import {
 import {
   todoOriginMeta,
   todoRecommendedModelMeta,
-  isFlagshipTask,
-  isFastTask,
+  isCriticalTask,
+  isExtractionTask,
+  todoModelTier,
   MODEL_SUGGESTIONS,
   isExecutiveOrigin,
   isAuditOrigin,
@@ -723,30 +724,32 @@ describe('todoRecommendedModelMeta helper refactor (CC reduction via lookup tabl
     expect(todoRecommendedModelMeta(mockTask({ status: 'rejected' }))).toBeNull()
   })
 
-  test('isFlagshipTask: mengenali task kompleks, arsitektur, security, atau critical', () => {
-    expect(isFlagshipTask(mockTask({ complexity_level: 'complex' }))).toBe(true)
-    expect(isFlagshipTask(mockTask({ priority: 'critical' }))).toBe(true)
-    expect(isFlagshipTask(mockTask({ category: 'architecture' }))).toBe(true)
-    expect(isFlagshipTask(mockTask({ category: 'security' }))).toBe(true)
-    expect(isFlagshipTask(mockTask({ category: 'backend', priority: 'medium', complexity_level: 'normal' }))).toBe(false)
+  test('isCriticalTask: hanya security atau prioritas critical (todo berat tetap model utama)', () => {
+    expect(isCriticalTask(mockTask({ category: 'security' }))).toBe(true)
+    expect(isCriticalTask(mockTask({ priority: 'critical' }))).toBe(true)
+    expect(isCriticalTask(mockTask({ complexity_level: 'complex', category: 'architecture' }))).toBe(false)
   })
 
-  test('isFastTask: mengenali task quick, ui_ux, atau general', () => {
-    expect(isFastTask(mockTask({ complexity_level: 'quick' }))).toBe(true)
-    expect(isFastTask(mockTask({ category: 'ui_ux' }))).toBe(true)
-    expect(isFastTask(mockTask({ category: 'general' }))).toBe(true)
-    expect(isFastTask(mockTask({ category: 'backend', complexity_level: 'normal' }))).toBe(false)
+  test('isExtractionTask: judul ekstraksi/olah data massal yang tidak berat', () => {
+    expect(isExtractionTask(mockTask({ title: 'Ekstrak daftar harga ke JSON' }))).toBe(true)
+    expect(isExtractionTask(mockTask({ title: 'Migrasi data pelanggan', complexity_level: 'complex' }))).toBe(false)
+    expect(isExtractionTask(mockTask({ title: 'Tambah filter tanggal' }))).toBe(false)
   })
 
-  test('todoRecommendedModelMeta: memilih saran flagship, fast, atau balanced secara deterministik', () => {
-    const flagshipTodo = mockTask({ complexity_level: 'complex' })
-    expect(todoRecommendedModelMeta(flagshipTodo)).toEqual(MODEL_SUGGESTIONS.flagship)
+  test('todoRecommendedModelMeta: Sonnet utama, Opus kritis, Haiku ekstraksi', () => {
+    expect(todoModelTier(mockTask({ complexity_level: 'complex' }))).toBe('utama')
+    expect(todoRecommendedModelMeta(mockTask({ complexity_level: 'complex' }))).toEqual(MODEL_SUGGESTIONS.utama)
+    expect(todoRecommendedModelMeta(mockTask({ category: 'security' }))).toEqual(MODEL_SUGGESTIONS.kritis)
+    expect(todoRecommendedModelMeta(mockTask({ title: 'Ekstrak daftar produk ke CSV' }))).toEqual(MODEL_SUGGESTIONS.ekstraksi)
+  })
 
-    const fastTodo = mockTask({ category: 'ui_ux' })
-    expect(todoRecommendedModelMeta(fastTodo)).toEqual(MODEL_SUGGESTIONS.fast)
-
-    const standardTodo = mockTask({ category: 'backend', complexity_level: 'normal', priority: 'medium' })
-    expect(todoRecommendedModelMeta(standardTodo)).toEqual(MODEL_SUGGESTIONS.balanced)
+  test('todoRecommendedModelMeta: memakai model setara yang terpasang bila Claude Code tidak ada', () => {
+    const tiers = { utama: [{ agent: 'agy', agent_name: 'Google Antigravity CLI', model: 'claude-sonnet-4-6' }] }
+    const meta = todoRecommendedModelMeta(mockTask(), tiers)
+    expect(meta?.label).toBe('Saran: claude-sonnet-4-6')
+    expect(meta?.title).toContain('Google Antigravity CLI: claude-sonnet-4-6')
+    const withClaude = todoRecommendedModelMeta(mockTask(), { utama: [{ agent: 'claude', agent_name: 'Claude Code', model: 'sonnet' }, ...tiers.utama] })
+    expect(withClaude?.label).toBe('Saran: Sonnet')
   })
 })
 

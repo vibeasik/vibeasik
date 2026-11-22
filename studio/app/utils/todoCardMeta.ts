@@ -90,43 +90,70 @@ export type ModelSuggestion = {
   title: string
 }
 
-export const MODEL_SUGGESTIONS: Record<'flagship' | 'fast' | 'balanced', ModelSuggestion> = {
-  flagship: {
-    label: 'Saran: Claude Opus 5',
+/**
+ * Kelas model todo — sama dengan aturan engine (models.TodoModelTier). Model kelas menengah (setara Claude Sonnet)
+ * adalah model utama: dikawal pengetahuan vibeasik ia cukup untuk hampir semua todo, termasuk yang berat.
+ * Opus hanya untuk todo kritis; Haiku hanya untuk ekstraksi/olah data massal yang hasilnya pasti.
+ */
+export type ModelTier = 'utama' | 'kritis' | 'ekstraksi'
+
+/** Model setara satu kelas untuk satu agent coding yang terpasang (GET /api/orchestrator/model-tiers). */
+export type TierChoice = { agent: string, agent_name: string, model: string }
+export type TierModels = Partial<Record<ModelTier, TierChoice[]>>
+
+export const MODEL_SUGGESTIONS: Record<ModelTier, ModelSuggestion> = {
+  kritis: {
+    label: 'Saran: Opus',
     badgeClass: 'bg-violet-100/80 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300 border-violet-200 dark:border-violet-800',
-    icon: 'i-lucide-brain-circuit',
-    title: 'Tugas rumit / arsitektur / keamanan kritis: Disarankan model flagship (Claude Opus 5 via OpenCode)'
+    icon: 'i-lucide-shield-alert',
+    title: 'Todo kritis (keamanan / prioritas critical): model kelas Opus'
   },
-  fast: {
-    label: 'Saran: GLM 5.2 / Flash',
+  ekstraksi: {
+    label: 'Saran: Haiku',
     badgeClass: 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
     icon: 'i-lucide-zap',
-    title: 'Tugas ringan / UI polish: Cukup model cepat & hemat (GLM 5.2 OpenCode atau Gemini Flash Antigravity)'
+    title: 'Ekstraksi / olah data massal yang hasilnya pasti: cukup model kelas Haiku'
   },
-  balanced: {
-    label: 'Saran: Claude Sonnet 5',
+  utama: {
+    label: 'Saran: Sonnet',
     badgeClass: 'bg-blue-100/80 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800',
     icon: 'i-lucide-sparkles',
-    title: 'Tugas fitur / backend standar: Disarankan model cerdas & seimbang (Claude Sonnet 5 / DeepSeek V4 Pro via OpenCode)'
+    title: 'Model utama vibeasik: kelas Sonnet, dikawal pengetahuan vibeasik — termasuk todo berat (effort menyesuaikan)'
   }
 }
 
-export const isFlagshipTask = (todo: Todo): boolean =>
-  todo.complexity_level === 'complex' ||
-  todo.priority === 'critical' ||
-  todo.category === 'architecture' ||
-  todo.category === 'security'
+const EXTRACTION_TITLE = /\b(ekstrak\w*|extract\w*|impor data|import data|ekspor data|export data|scrap\w*|kumpulkan data|inventaris\w*|konversi data|convert data|format ulang|reformat|terjemah\w*|translate|seed data|data dummy|isi data|migrasi data|rename massal|ganti nama massal|daftar(kan)? semua)\b/i
 
-export const isFastTask = (todo: Todo): boolean =>
-  todo.complexity_level === 'quick' ||
-  todo.category === 'ui_ux' ||
-  todo.category === 'general'
+export const isCriticalTask = (todo: Todo): boolean =>
+  todo.category === 'security' || todo.priority === 'critical'
 
-export const todoRecommendedModelMeta = (todo: Todo): ModelSuggestion | null => {
+export const isExtractionTask = (todo: Todo): boolean =>
+  todo.complexity_level !== 'complex' && EXTRACTION_TITLE.test(todo.title || '')
+
+export const todoModelTier = (todo: Todo): ModelTier => {
+  if (isCriticalTask(todo)) return 'kritis'
+  if (isExtractionTask(todo)) return 'ekstraksi'
+  return 'utama'
+}
+
+/**
+ * Lencana saran model. Dengan `tiers` (model setara per agent terpasang di komputer ini) label memakai model yang
+ * benar-benar tersedia — Claude Code dulu, lalu agent lain (mis. Antigravity claude-sonnet-4-6) — dan tooltip
+ * menyebut semua pilihan setara.
+ */
+export const todoRecommendedModelMeta = (todo: Todo, tiers?: TierModels | null): ModelSuggestion | null => {
   if (todo.status === 'completed' || todo.status === 'rejected') return null
-  if (isFlagshipTask(todo)) return MODEL_SUGGESTIONS.flagship
-  if (isFastTask(todo)) return MODEL_SUGGESTIONS.fast
-  return MODEL_SUGGESTIONS.balanced
+  const tier = todoModelTier(todo)
+  const base = MODEL_SUGGESTIONS[tier]
+  const choices = tiers?.[tier]
+  if (!tiers) return base
+  if (!choices?.length) {
+    return { ...base, title: `${base.title}. Belum ada agent terpasang dengan model setara kelas ini.` }
+  }
+  const first = choices[0]!
+  const label = first.agent === 'claude' ? base.label : `Saran: ${first.model}`
+  const list = choices.map(c => `${c.agent_name}: ${c.model}`).join(' · ')
+  return { ...base, label, title: `${base.title}. Di komputer ini: ${list}` }
 }
 
 export interface TodoOriginMetaResult {

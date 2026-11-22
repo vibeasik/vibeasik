@@ -8,7 +8,8 @@ const priorityMeta = computed(() => todoPriorityMeta(props.todo))
 const statusMeta = computed(() => todoStatusMeta(props.todo))
 const categoriesMeta = computed(() => todoCategoriesMeta(props.todo))
 const targetAppsDisplay = computed(() => todoTargetAppsDisplay(props.todo))
-const recommendedModelMeta = computed(() => todoRecommendedModelMeta(props.todo))
+const { tiers: modelTiers } = useModelTiers()
+const recommendedModelMeta = computed(() => todoRecommendedModelMeta(props.todo, modelTiers.value))
 const originMeta = computed(() => todoOriginMeta(props.todo))
 </script>
 
