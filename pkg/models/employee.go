@@ -115,13 +115,15 @@ type EmployeeKnowledge struct {
 	// MergedIntoID: id butir pengetahuan utama tempat butir ini dileburkan
 	MergedIntoID *uint `gorm:"index" json:"merged_into_id,omitempty"`
 	// AboutEmployeeID: untuk catatan tim (source team) — anggota tim yang dicatat leader
-	AboutEmployeeID *uint      `gorm:"index" json:"about_employee_id,omitempty"`
-	ReviewID        *uint      `json:"review_id,omitempty"`
-	Status          string     `gorm:"size:32;index;default:'active'" json:"status"`
-	RemovedReason   string     `gorm:"type:text" json:"removed_reason,omitempty"`
-	RemovedAt       *time.Time `json:"removed_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	AboutEmployeeID *uint `gorm:"index" json:"about_employee_id,omitempty"`
+	ReviewID        *uint `json:"review_id,omitempty"`
+	// Model: model yang menulis butir ini (bila diketahui), untuk menilai dan merapikan mutu pengetahuan
+	Model         string     `gorm:"size:160" json:"model,omitempty"`
+	Status        string     `gorm:"size:32;index;default:'active'" json:"status"`
+	RemovedReason string     `gorm:"type:text" json:"removed_reason,omitempty"`
+	RemovedAt     *time.Time `json:"removed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // Status tugas pegawai.
