@@ -17,6 +17,29 @@ func (s *Server) getKnowledgeGraph(c *fiber.Ctx) error {
 	return c.JSON(knowledge.GetGraph(s.db, c.QueryInt("limit")))
 }
 
+// getEmployeeKnowledgeNetwork: jaring pengalaman (milik sendiri, adopsi, hasil promosi) & pengetahuan satu pegawai.
+func (s *Server) getEmployeeKnowledgeNetwork(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id")
+	if err != nil || id <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid employee id"})
+	}
+	return c.JSON(knowledge.EmployeeNetwork(s.db, uint(id)))
+}
+
+// dropKnowledgeAdoption: pemilik membuang pengalaman rekan dari jaring seorang pegawai.
+func (s *Server) dropKnowledgeAdoption(c *fiber.Ctx) error {
+	emp, err1 := c.ParamsInt("id")
+	node, err2 := c.ParamsInt("node")
+	if err1 != nil || err2 != nil || emp <= 0 || node <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid id"})
+	}
+	n := knowledge.DropAdoption(s.db, uint(emp), []uint{uint(node)}, "dibuang manual dari Studio")
+	if n == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "adopsi aktif tidak ditemukan"})
+	}
+	return c.JSON(fiber.Map{"dropped": n})
+}
+
 func (s *Server) listKnowledgeNodes(c *fiber.Ctx) error {
 	return c.JSON(knowledge.List(s.db, knowledge.Filter{
 		Text: c.Query("q"), Domain: c.Query("domain"), Kind: c.Query("kind"), Source: c.Query("source"),

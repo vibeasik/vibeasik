@@ -14,6 +14,13 @@ export const useKnowledgeApi = () => {
 
   const getKnowledgeNode = async (id: number): Promise<KnowledgeDetail> => await $fetch<KnowledgeDetail>(`${apiBase}/api/knowledge/nodes/${id}`)
 
+  // Jaring pengalaman pegawai & pembuangan pengalaman rekan dari jaringnya
+  const getEmployeeNetwork = async (employeeId: number): Promise<KnowledgeNetwork> =>
+    await $fetch<KnowledgeNetwork>(`${apiBase}/api/knowledge/employees/${employeeId}/network`)
+
+  const dropKnowledgeAdoption = async (employeeId: number, nodeId: number): Promise<{ dropped: number }> =>
+    await $fetch<{ dropped: number }>(`${apiBase}/api/knowledge/employees/${employeeId}/adoptions/${nodeId}/drop`, { method: 'POST' })
+
   const teachKnowledge = async (body: KnowledgeNoteInput): Promise<{ node: KnowledgeNode, merged: boolean }> =>
     await $fetch<{ node: KnowledgeNode, merged: boolean }>(`${apiBase}/api/knowledge/nodes`, { method: 'POST', body })
 
@@ -105,6 +112,8 @@ export const useKnowledgeApi = () => {
     getKnowledgeGraph,
     listKnowledgeNodes,
     getKnowledgeNode,
+    getEmployeeNetwork,
+    dropKnowledgeAdoption,
     teachKnowledge,
     knowledgeFeedback,
     retireKnowledgeNode,

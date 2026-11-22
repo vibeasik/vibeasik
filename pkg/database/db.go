@@ -158,6 +158,7 @@ func schemaModels() []interface{} {
 		&models.KnowledgeLink{},
 		&models.KnowledgeCluster{},
 		&models.KnowledgeUse{},
+		&models.KnowledgeAdoption{},
 		&models.KnowledgeVerdict{},
 		&models.KnowledgeGap{},
 		&models.TrafficSource{},

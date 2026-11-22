@@ -171,6 +171,32 @@ type KnowledgeUse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// KnowledgeAdoption: pegawai memakai pengalaman pribadi pegawai lain lewat rujukan (bukan salinan), sehingga bukti
+// dari pekerjaan penerima kembali ke butir yang sama. Penerima menjalani masa coba lalu mempertahankan atau membuang.
+type KnowledgeAdoption struct {
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	NodeID     uint   `gorm:"uniqueIndex:idx_knowledge_adoption_node_emp" json:"node_id"`
+	EmployeeID uint   `gorm:"uniqueIndex:idx_knowledge_adoption_node_emp;index" json:"employee_id"`
+	Status     string `gorm:"size:16;index" json:"status"` // KnowledgeAdoption*
+	// Uses: berapa kali disodorkan ke penerima; Cited: dikutip di catatan penyelesaian penerima;
+	// Helpful/Harmful: dikutip di todo penerima yang lulus / ditandai KELIRU atau dinilai keliru oleh penilai.
+	Uses      int        `json:"uses"`
+	Cited     int        `json:"cited"`
+	Helpful   int        `json:"helpful"`
+	Harmful   int        `json:"harmful"`
+	Reason    string     `gorm:"size:255" json:"reason,omitempty"`
+	DecidedAt *time.Time `json:"decided_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// Status adopsi pengalaman.
+const (
+	KnowledgeAdoptionTrial   = "trial"   // ditawarkan dan sedang dicoba penerima
+	KnowledgeAdoptionKept    = "kept"    // terbukti cocok untuk penerima
+	KnowledgeAdoptionDropped = "dropped" // dibuang penerima (tidak cocok, keliru, atau tidak pernah dipakai)
+)
+
 // KnowledgeVerdict: vonis terakhir penilai atas satu node di satu konteks. Satu pekerjaan memberi paling banyak
 // satu bukti kuat per node walaupun dinilai berkali-kali (putaran QA gate, review berkala); vonis yang berubah
 // memindahkan buktinya, bukan menambah. Tidak ikut dibuang bersama catatan pemakaian.

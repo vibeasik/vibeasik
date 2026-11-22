@@ -21,7 +21,8 @@ func testDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(&models.KnowledgeNode{}, &models.KnowledgeLink{}, &models.KnowledgeCluster{}, &models.KnowledgeUse{},
-		&models.KnowledgeVerdict{}, &models.KnowledgeGap{}, &models.Employee{}, &models.EmployeeKnowledge{}, &models.EmployeeAgenda{}); err != nil {
+		&models.KnowledgeVerdict{}, &models.KnowledgeGap{}, &models.Employee{}, &models.EmployeeKnowledge{}, &models.EmployeeAgenda{},
+		&models.KnowledgeAdoption{}, &models.Todo{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -243,8 +244,9 @@ func TestPromoteProvenPersonalKnowledge(t *testing.T) {
 	db := testDB(t)
 	emp := uint(5)
 	p := models.KnowledgeNode{Kind: "procedure", Domain: "web", Title: "Debounce pencarian", Content: "Input pencarian memakai debounce 300ms.", Source: models.KnowledgeSrcEmployee,
-		Key: "employee:1", OwnerEmployeeID: &emp, OwnerName: "Sari", Weight: 70, Helpful: 4, Status: "active"}
+		Key: "employee:1", OwnerEmployeeID: &emp, OwnerName: "Sari", Weight: 70, Helpful: 9, Status: "active"}
 	db.Create(&p)
+	spreadEvidence(t, db, p.ID, [][2]uint{{5, 1}, {6, 1}, {7, 2}})
 	if n := promote(db); n != 1 {
 		t.Fatalf("pengetahuan pribadi yang terbukti harus dipromosikan, dapat %d", n)
 	}

@@ -37,6 +37,9 @@ type Report struct {
 	Links    int    `json:"links"`
 	Clusters int    `json:"clusters"`
 	Settled  int    `json:"settled"`
+	Offered  int    `json:"offered"` // tawaran pengalaman baru ke pegawai lain (adopt.go)
+	Decided  int    `json:"decided"` // masa coba adopsi yang ditutup
+	Demoted  int    `json:"demoted"` // patokan hasil promosi yang ditandai perlu ditinjau
 	Nodes    int    `json:"nodes"`
 	Took     string `json:"took"`
 }
@@ -92,8 +95,11 @@ func Curate(db *gorm.DB) Report {
 	var r Report
 	r.Synced = SyncSources(db, extraSources...)
 	r.Merged = mergeDuplicates(db)
+	r.Decided = decideTrials(db, time.Now())
 	r.Promoted = promote(db)
 	r.Retired, r.Flagged = prune(db)
+	r.Demoted = demote(db, time.Now())
+	r.Offered = offerShares(db, time.Now())
 	r.Outdated = flagOutdated(db, time.Now())
 	ix := current(db)
 	r.Nodes = ix.n
@@ -175,18 +181,11 @@ func mergeDuplicates(db *gorm.DB) int {
 
 // Ambang kurasi atas bukti kuat (KnowledgeNode.Helpful/Harmful & StrongUtility).
 const (
-	promoteMinHelpful = 3
-	promoteMinUtility = 0.75
 	pruneMinHarmful   = 3
 	retireMaxUtility  = 0.3 // node asli dipensiunkan di bawah ini
 	flagMaxUtility    = 0.4 // patokan berkas ditandai perlu ditinjau di bawah ini
 	recoverMinUtility = 0.5 // tanda perlu ditinjau dilepas lagi mulai dari sini
 )
-
-// promotable: pengetahuan pribadi yang berulang kali terbukti membantu menurut bukti kuat.
-func promotable(n models.KnowledgeNode) bool {
-	return n.OwnerEmployeeID != nil && n.Helpful >= promoteMinHelpful && n.StrongUtility() >= promoteMinUtility
-}
 
 // pruneAction: "retire" (node asli dipensiunkan), "flag" (patokan berkas perlu ditinjau), atau "" — menurut bukti
 // kuat saja.
@@ -202,27 +201,6 @@ func pruneAction(n models.KnowledgeNode) string {
 		return "flag"
 	}
 	return ""
-}
-
-// promote: pengetahuan pribadi yang berulang kali terbukti membantu dibagikan ke pustaka bersama kantor.
-func promote(db *gorm.DB) int {
-	var rows []models.KnowledgeNode
-	db.Where("status = ? AND owner_employee_id IS NOT NULL AND helpful >= ?", models.KnowledgeNodeActive, promoteMinHelpful).Find(&rows)
-	n := 0
-	now := time.Now()
-	for _, r := range rows {
-		if !promotable(r) || !NodeInForce(r, now) {
-			continue
-		}
-		_, created, err := upsertKey(db, Note{
-			Key: "promoted:" + itoa(r.ID), Kind: r.Kind, Domain: r.Domain, Title: r.Title, Content: r.Content,
-			Source: models.KnowledgeSrcPromoted, Tags: append([]string{"promosi"}, r.Tags...), OwnerName: r.OwnerName, Weight: r.Weight,
-		})
-		if err == nil && created {
-			n++
-		}
-	}
-	return n
 }
 
 // prune: node asli yang terbukti merugikan dipensiunkan; patokan bersumber berkas cukup ditandai perlu ditinjau
@@ -247,7 +225,7 @@ func prune(db *gorm.DB) (retired, flagged int) {
 	db.Where("status = ? AND needs_review = ?", models.KnowledgeNodeActive, true).Find(&recovered)
 	outdated := outdatedNodes(db, time.Now())
 	for _, n := range recovered {
-		if _, stale := outdated[n.ID]; !stale && !strings.HasPrefix(n.StatusReason, supersedeProposal) && n.StrongUtility() >= recoverMinUtility {
+		if _, stale := outdated[n.ID]; !stale && !strings.HasPrefix(n.StatusReason, supersedeProposal) && !strings.HasPrefix(n.StatusReason, demoteReasonPrefix) && n.StrongUtility() >= recoverMinUtility {
 			db.Model(&n).UpdateColumn("needs_review", false)
 		}
 	}

@@ -160,3 +160,25 @@ export interface KnowledgePromptPart {
   knowledge_section: string
   hits: KnowledgeHit[] | null
 }
+
+// Jaring pengalaman satu pegawai: pengalaman sendiri, pengalaman rekan yang dicoba/dipertahankan/dibuang, dan patokan
+// hasil promosi pengalamannya; domains = pemakaian patokan bersama per bidang (30 hari).
+export interface KnowledgeNetworkNode {
+  id: number
+  title: string
+  domain: string
+  kind: string
+  relation: 'own' | 'adopted' | 'trial' | 'dropped' | 'promoted'
+  owner?: string
+  helpful: number
+  harmful: number
+  uses: number
+  reason?: string
+}
+
+export interface KnowledgeNetwork {
+  employee_id: number
+  nodes: KnowledgeNetworkNode[] | null
+  edges: { from: number, to: number, kind: 'similar' | 'promoted', strength?: number }[] | null
+  domains: Record<string, number>
+}

@@ -155,11 +155,25 @@ var (
 	lineEnd = regexp.MustCompile(`\.\s|\b[A-Z]{5,}:|\|`)
 )
 
+// Baris umpan balik di catatan penyelesaian: butir yang keliru dan pengalaman rekan yang tidak cocok bagi penulisnya.
+var (
+	wrongLine = regexp.MustCompile(`KELIRU:([^\n]*)`)
+	unfitLine = regexp.MustCompile(`TIDAK COCOK:([^\n]*)`)
+)
+
 // CitedNodes mengambil ID node dari semua baris "PENGETAHUAN: K<id>, …" pada teks (urut, tanpa duplikat).
-func CitedNodes(text string) []uint {
+func CitedNodes(text string) []uint { return labeledNodes(knowledgeLine, text) }
+
+// WrongNodes: ID node di baris "KELIRU: K<id>, …".
+func WrongNodes(text string) []uint { return labeledNodes(wrongLine, text) }
+
+// UnfitNodes: ID node di baris "TIDAK COCOK: K<id>, …".
+func UnfitNodes(text string) []uint { return labeledNodes(unfitLine, text) }
+
+func labeledNodes(line *regexp.Regexp, text string) []uint {
 	var out []uint
 	seen := map[uint]bool{}
-	for _, m := range knowledgeLine.FindAllStringSubmatch(text, -1) {
+	for _, m := range line.FindAllStringSubmatch(text, -1) {
 		seg := m[1]
 		if loc := lineEnd.FindStringIndex(seg); loc != nil {
 			seg = seg[:loc[0]]

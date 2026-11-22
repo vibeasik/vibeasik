@@ -153,6 +153,8 @@ func (s *Server) setupRoutes() {
 	// - Kurasi (curate) dan registrasi node baru hanya dapat dipicu oleh pemanggil lokal terotentikasi.
 	api.Get("/knowledge", s.getKnowledgeOverview)
 	api.Get("/knowledge/graph", s.getKnowledgeGraph)
+	api.Get("/knowledge/employees/:id/network", s.getEmployeeKnowledgeNetwork)
+	api.Post("/knowledge/employees/:id/adoptions/:node/drop", s.dropKnowledgeAdoption)
 	api.Get("/knowledge/nodes", s.listKnowledgeNodes)
 	api.Post("/knowledge/nodes", s.teachKnowledge)
 	api.Get("/knowledge/nodes/:id", s.getKnowledgeNode)

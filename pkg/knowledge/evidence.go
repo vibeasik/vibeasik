@@ -306,10 +306,10 @@ func RecountEvidence(db *gorm.DB, apply bool, top int) (*EvidenceReport, error) 
 			rep.Coverage.HelpfulLegacy += c[0]
 			rep.Coverage.HarmfulLegacy += c[1]
 		}
-		if promotable(n) {
+		if promotableCounts(n) {
 			rep.EligibleBefore++
 		}
-		if promotable(after) {
+		if promotableCounts(after) {
 			rep.EligibleAfter++
 		}
 		before, now := pruneAction(n), pruneAction(after)
@@ -389,9 +389,9 @@ func RecountEvidence(db *gorm.DB, apply bool, top int) (*EvidenceReport, error) 
 			after.Harmful -= mv.harmful
 		}
 		switch {
-		case !promotable(*origin):
+		case !promotableCounts(*origin):
 			rep.PromotedAlreadyOff++
-		case !promotable(after):
+		case !promotableCounts(after):
 			rep.PromotedIneligible++
 			if len(rep.PromotedIneligibleIDs) < 50 {
 				rep.PromotedIneligibleIDs = append(rep.PromotedIneligibleIDs, p.ID)

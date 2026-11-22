@@ -172,11 +172,12 @@ func TestPromoteAndPruneIgnoreWeakEvidence(t *testing.T) {
 	weakOnly := models.KnowledgeNode{Kind: "procedure", Domain: "web", Title: "Ikut todo bagus", Content: "isi a", Source: models.KnowledgeSrcEmployee,
 		Key: "employee:1", OwnerEmployeeID: &emp, Weight: 60, Helpful: 1, WeakHelpful: 60, Status: models.KnowledgeNodeActive}
 	strong := models.KnowledgeNode{Kind: "procedure", Domain: "web", Title: "Terbukti", Content: "isi b", Source: models.KnowledgeSrcEmployee,
-		Key: "employee:2", OwnerEmployeeID: &emp, Weight: 60, Helpful: 3, WeakHarmful: 60, Status: models.KnowledgeNodeActive}
+		Key: "employee:2", OwnerEmployeeID: &emp, Weight: 60, Helpful: 9, WeakHarmful: 60, Status: models.KnowledgeNodeActive}
 	weakBad := models.KnowledgeNode{Kind: "lesson", Domain: "go", Title: "Ikut todo buruk", Content: "isi c", Weight: 50, Harmful: 1, WeakHarmful: 80, Status: models.KnowledgeNodeActive}
 	for _, n := range []*models.KnowledgeNode{&weakOnly, &strong, &weakBad} {
 		db.Create(n)
 	}
+	spreadEvidence(t, db, strong.ID, [][2]uint{{4, 1}, {8, 1}, {9, 2}})
 	if n := promote(db); n != 1 {
 		t.Fatalf("hanya bukti kuat yang mempromosikan, dapat %d", n)
 	}

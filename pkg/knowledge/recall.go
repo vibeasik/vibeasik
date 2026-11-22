@@ -24,6 +24,8 @@ type Query struct {
 	Limit   int    `json:"limit,omitempty"`
 	// DryRun: hitung celah seperti pekerjaan sungguhan, tetapi jangan catat pemakaian maupun celah (pratinjau prompt).
 	DryRun bool `json:"-"`
+	// adopted: pengalaman pegawai lain yang dicoba/dipertahankan EmployeeID (diisi Recall).
+	adopted map[uint]bool
 }
 
 // Hit adalah satu node hasil temu-kembali beserta rincian skornya.
@@ -93,6 +95,7 @@ func Recall(db *gorm.DB, q Query) Result {
 	if q.Limit <= 0 || q.Limit > 50 {
 		q.Limit = 10
 	}
+	q.adopted = adoptedBy(db, q.EmployeeID)
 	ix := current(db)
 	res := rank(db, ix, q, DefaultRankWeights, time.Now(), nil)
 	explore(db, ix, q, &res, time.Now()) // slot coba (explore.go): paling banyak satu node tambahan di ujung daftar
@@ -117,6 +120,7 @@ func Recall(db *gorm.DB, q Query) Result {
 			hitIDs = append(hitIDs, h.ID)
 		}
 		recordUse(db, q.Context, q.EmployeeID, hitIDs)
+		recordAdoptionUses(db, q.EmployeeID, adoptedHits(q.adopted, hitIDs))
 	}
 	return res
 }
@@ -142,7 +146,7 @@ func rankWith(db *gorm.DB, ix *index, q Query, w RankWeights, now time.Time, exc
 	kinds := setOf(q.Kinds)
 	skip := setOf(q.SkipSources)
 	allowed := func(e *entry) bool {
-		if e.owner != 0 && e.owner != q.EmployeeID {
+		if e.owner != 0 && e.owner != q.EmployeeID && !q.adopted[e.id] {
 			return false
 		}
 		if (len(kinds) > 0 && !kinds[e.kind]) || skip[e.source] {
@@ -367,7 +371,7 @@ func GapLine(gaps []string) string {
 }
 
 // FeedbackLine meminta agent melaporkan butir yang keliru (bukti untuk pembelajaran pusat).
-const FeedbackLine = "- Butir berlabel K<id> berasal dari Pusat Pengetahuan. Bila ada yang keliru/menyesatkan untuk kasus ini, sebut ID-nya di catatan penyelesaian atau laporkan lewat MCP vibeasik_knowledge_feedback.\n"
+const FeedbackLine = "- Butir berlabel K<id> berasal dari Pusat Pengetahuan. Di catatan penyelesaian: `PENGETAHUAN: K<id>, …` untuk butir yang benar-benar kamu pakai, `KELIRU: K<id>, …` untuk butir yang salah/menyesatkan, dan `TIDAK COCOK: K<id>, …` untuk pengalaman rekan yang benar tetapi tidak cocok dengan caramu bekerja (dibuang dari jaringmu). Bisa juga lewat MCP vibeasik_knowledge_feedback.\n"
 
 // Brief = butir terpilih + celah (tanpa judul bagian); kosong bila tidak ada apa pun.
 func Brief(db *gorm.DB, q Query) string {
@@ -417,4 +421,18 @@ func setOf(xs []string) map[string]bool {
 		}
 	}
 	return m
+}
+
+// adoptedHits: id hasil temu-kembali yang merupakan butir adopsi.
+func adoptedHits(adopted map[uint]bool, ids []uint) []uint {
+	if len(adopted) == 0 {
+		return nil
+	}
+	var out []uint
+	for _, id := range ids {
+		if adopted[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }

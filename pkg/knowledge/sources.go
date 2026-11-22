@@ -66,13 +66,15 @@ func employeeNotes(db *gorm.DB, empID uint) ([]Note, bool) {
 		q = q.Where("id = ?", empID)
 	}
 	var emps []models.Employee
-	if q.Select("id", "name").Find(&emps).Error != nil {
+	if q.Select("id", "name", "stack").Find(&emps).Error != nil {
 		return nil, false
 	}
 	names := make(map[uint]string, len(emps))
+	stackDomain := make(map[uint]string, len(emps)) // cadangan domain: bidang dari stack pemilik
 	ids := make([]uint, 0, len(emps))
 	for _, e := range emps {
 		names[e.ID] = e.Name
+		stackDomain[e.ID] = primaryDomain(strings.Join(e.Stack, " "))
 		ids = append(ids, e.ID)
 	}
 	if len(ids) == 0 {
@@ -89,8 +91,12 @@ func employeeNotes(db *gorm.DB, empID uint) ([]Note, bool) {
 			kind = models.KnowledgeKindLesson
 		}
 		owner := k.EmployeeID
+		domain := ""
+		if primaryDomain(k.Topic+"\n"+k.Content) == "" {
+			domain = stackDomain[k.EmployeeID] // isi tidak menyebut ekosistem: pakai bidang pemiliknya
+		}
 		out = append(out, Note{
-			Key: fmt.Sprintf("employee:%d", k.ID), Kind: kind, Source: models.KnowledgeSrcEmployee, Title: k.Topic, Content: k.Content,
+			Key: fmt.Sprintf("employee:%d", k.ID), Kind: kind, Source: models.KnowledgeSrcEmployee, Title: k.Topic, Content: k.Content, Domain: domain,
 			Weight: k.Weight, Tags: []string{k.Source}, OwnerEmployeeID: &owner, OwnerName: names[k.EmployeeID],
 		})
 	}
