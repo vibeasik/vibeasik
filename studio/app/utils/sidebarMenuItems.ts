@@ -401,6 +401,16 @@ export const GLOBAL_NAV_ITEMS: NavItem[] = [
     exact: false
   },
   {
+    // Alat bantu gambar untuk pemilik & agent (tool MCP vibeasik_image_*): hapus latar, ubah ukuran, kompres.
+    id: 'image-tools',
+    group: 'Pengetahuan',
+    to: '/image-tools',
+    label: 'Alat gambar',
+    desc: 'Hapus latar & edit ringan',
+    icon: 'i-lucide-image-minus',
+    exact: false
+  },
+  {
     id: 'design-lessons',
     group: 'Pengetahuan',
     to: '/design-lessons',

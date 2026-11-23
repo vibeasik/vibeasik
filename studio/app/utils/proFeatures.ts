@@ -37,7 +37,8 @@ export const PRO_PAGES: Record<string, string> = {
   '/runtime-test': 'runtime_sim',
   '/screenshots': 'runtime_sim',
   '/design-library': 'design_library',
-  '/design-lessons': 'design_library'
+  '/design-lessons': 'design_library',
+  '/image-tools': 'design_library'
 }
 
 export const proFeatureForPath = (path: string): string | undefined => {
