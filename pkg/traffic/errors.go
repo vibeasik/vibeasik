@@ -18,6 +18,7 @@ const (
 	KindRequest   = "request"
 	KindError     = "error"
 	KindHeartbeat = "heartbeat"
+	KindPageview  = "pageview"
 
 	SideServer  = "server"
 	SideBrowser = "browser"
@@ -40,7 +41,9 @@ var (
 )
 
 // IsSpecialKind = event bukan request (tidak dihitung di statistik rute/dimensi).
-func IsSpecialKind(kind string) bool { return kind == KindError || kind == KindHeartbeat }
+func IsSpecialKind(kind string) bool {
+	return kind == KindError || kind == KindHeartbeat || kind == KindPageview
+}
 
 // relativePath mengubah path absolut jadi relatif: ke penanda pustaka bila ada, kalau tidak dua segmen terakhir.
 func relativePath(p string) string {
@@ -214,25 +217,32 @@ func splitKinds(events []Event) (reqs, special []Event) {
 	return
 }
 
-// ingestSpecial menyimpan event error/heartbeat. Tidak menyentuh statistik request.
-func ingestSpecial(db *gorm.DB, sourceID uint, events []Event, defaultInstance string) error {
+// ingestSpecial menyimpan event error/heartbeat/pageview. Tidak menyentuh statistik request.
+func ingestSpecial(db *gorm.DB, src *models.TrafficSource, events []Event, defaultInstance string) error {
 	if len(events) == 0 {
 		return nil
 	}
 	now := timeNow()
 	return db.Transaction(func(tx *gorm.DB) error {
 		var incidents []errorIncident
+		var views []normEvent
 		for _, ev := range events {
 			n := normalizeEvent(ev, now, defaultInstance)
-			if ev.Kind == KindHeartbeat {
-				if err := saveProcess(tx, sourceID, n); err != nil {
+			switch ev.Kind {
+			case KindPageview:
+				views = append(views, n)
+			case KindHeartbeat:
+				if err := saveProcess(tx, src.ID, n); err != nil {
 					return err
 				}
-				continue
+			default:
+				incidents = append(incidents, incidentOf(n))
 			}
-			incidents = append(incidents, incidentOf(n))
 		}
-		return recordErrors(tx, sourceID, incidents)
+		if err := persistPageviews(tx, src, views); err != nil {
+			return err
+		}
+		return recordErrors(tx, src.ID, incidents)
 	})
 }
 

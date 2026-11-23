@@ -57,6 +57,8 @@ type Totals struct {
 	Instances       int     `json:"instances"`
 	ReadShare       float64 `json:"read_share"` // GET/HEAD
 	SpanMinutes     float64 `json:"span_minutes"`
+	PageViews       int64   `json:"page_views"` // kunjungan halaman manusia (event pageview, tanpa bot)
+	Visitors        int64   `json:"visitors"`   // pengunjung unik (id harian; berganti tiap hari UTC)
 }
 
 type Point struct {
@@ -145,6 +147,10 @@ type Report struct {
 	NotFound        []KV                 `json:"not_found"`
 	TopIPs          []IPRow              `json:"top_ips"`
 	Recommendations []Recommendation     `json:"recommendations"`
+	Pages           []PageRow            `json:"pages"`
+	PageReferers    []KV                 `json:"page_referers"`
+	PageDevices     []KV                 `json:"page_devices"`
+	PageSeries      []PagePoint          `json:"page_series"`
 
 	minutes   []Point // per menit (hanya jendela gran menit) untuk deteksi kejenuhan
 	ipPeaks   []int64
@@ -572,6 +578,9 @@ func BuildReport(db *gorm.DB, src models.TrafficSource, w Window) (*Report, erro
 	peaks, authPeaks := loadIPPeaks(db, rep, src.ID, w.Gran, fromUnix)
 	fillTopIPs(rep, d.dims["ip"], peaks, d.ipAuth, authPeaks)
 	fillRoutesAndGroups(rep, agg, span)
+	if err := fillPages(db, rep, w, fromUnix, d.dims, now); err != nil {
+		return nil, err
+	}
 
 	rep.Recommendations = Advise(rep)
 	return rep, nil

@@ -234,7 +234,7 @@ func Ingest(db *gorm.DB, src *models.TrafficSource, events []Event, defaultInsta
 	defer lk.Unlock()
 
 	events, special := splitKinds(events)
-	if err := ingestSpecial(db, src.ID, special, defaultInstance); err != nil {
+	if err := ingestSpecial(db, src, special, defaultInstance); err != nil {
 		return 0, err
 	}
 	if len(events) == 0 {

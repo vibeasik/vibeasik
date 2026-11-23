@@ -43,7 +43,9 @@
   "unique_ips": 3,
   "instances": 2,
   "read_share": 0.7142857142857143,
-  "span_minutes": 600.5
+  "span_minutes": 600.5,
+  "page_views": 0,
+  "visitors": 0
  },
  "series": [
   {
@@ -1760,6 +1762,10 @@
    ]
   }
  ],
+ "pages": [],
+ "page_referers": [],
+ "page_devices": [],
+ "page_series": [],
  "Minutes": null,
  "IPPeaks": null,
  "ScannerNF": 25

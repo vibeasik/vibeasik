@@ -11,7 +11,7 @@ import (
 // SDK collector untuk BE live. Berkasnya tetap (tanpa templating); konfigurasi sepenuhnya lewat env
 // sehingga kunci tidak pernah tertulis di kode proyek.
 //
-//go:embed sdk/go/traffic.go sdk/go/errors.go sdk/go/fiber.go sdk/browser/vibeasik-errors.js sdk/node/vibeasik-traffic.cjs sdk/node/vibeasik-traffic.nitro.ts sdk/python/vibeasik_traffic.py sdk/php/VibeasikTraffic.php
+//go:embed sdk/go/traffic.go sdk/go/errors.go sdk/go/fiber.go sdk/go/pageview.go sdk/browser/vibeasik-errors.js sdk/browser/vibeasik-pageview.js sdk/node/vibeasik-traffic.cjs sdk/node/vibeasik-traffic.nitro.ts sdk/python/vibeasik_traffic.py sdk/php/VibeasikTraffic.php
 var sdkFS embed.FS
 
 type SDKFile struct {
@@ -53,6 +53,9 @@ var kitSpecs = []kitSpec{
 	{"laravel", "PHP · Laravel", "php", [][2]string{{"sdk/php/VibeasikTraffic.php", "app/Http/Middleware/VibeasikTraffic.php"}},
 		"// Laravel 11+: bootstrap/app.php\n->withMiddleware(function ($middleware) {\n    $middleware->append(\\App\\Http\\Middleware\\VibeasikTraffic::class);\n})\n\n// Laravel ≤10: app/Http/Kernel.php → $middleware\n\\App\\Http\\Middleware\\VibeasikTraffic::class,\n\n// Laporkan exception (Laravel 11+: bootstrap/app.php)\n->withExceptions(fn ($e) => $e->report(fn (\\Throwable $t) => \\App\\Http\\Middleware\\VibeasikTraffic::captureError($t)))",
 		"PHP-FPM: event diantre ke berkas temp lalu dikirim per batch setelah respons terkirim (terminate). Error dilaporkan lewat report() Laravel; heartbeat dikirim oportunistik (maks sekali per 30 detik saat ada request). Opsional: VIBEASIK_RELEASE."},
+	{"pageview", "Kunjungan halaman (pageview) · Go + browser", "go", [][2]string{{"sdk/go/traffic.go", "internal/vibeasiktraffic/traffic.go"}, {"sdk/go/errors.go", "internal/vibeasiktraffic/errors.go"}, {"sdk/go/pageview.go", "internal/vibeasiktraffic/pageview.go"}, {"sdk/browser/vibeasik-pageview.js", "public/vibeasik-pageview.js"}},
+		"import \"{{module}}/internal/vibeasiktraffic\"\n\nmux.Handle(vibeasiktraffic.PageviewPath, vibeasiktraffic.PageviewHandler())\n\n<!-- di <head> halaman -->\n<script src=\"/vibeasik-pageview.js\" data-endpoint=\"/_vibeasik/pv\" defer></script>",
+		"Tanpa kunci di browser: skrip mengirim ke server aplikasi sendiri (satu asal), server meneruskan ke vibeasik. Host halaman diambil dari header Host; kiriman lintas situs ditolak; batas 60 kiriman per menit per IP. Tanpa cookie/storage; menghormati Do Not Track & Global Privacy Control. Tidak dipilih otomatis oleh SuggestKit."},
 	{"browser", "Browser · JavaScript (Nuxt/Vue/React/lainnya)", "javascript", [][2]string{{"sdk/browser/vibeasik-errors.js", "public/vibeasik-errors.js"}},
 		"<!-- kunci ingest sumber ini kelihatan di browser: kunci hanya bisa mengirim error browser -->\n<script src=\"/vibeasik-errors.js\" data-url=\"https://URL-INGEST\" data-key=\"KUNCI-INGEST\" data-release=\"v1.0.0\" defer></script>",
 		"Menangkap window error & unhandledrejection; dedup dan maksimum per halaman; hanya path (tanpa query/hash) yang dikirim. Tidak dipilih otomatis oleh SuggestKit."},
