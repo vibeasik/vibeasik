@@ -132,6 +132,16 @@
       "inspection_check": "Untuk artikel yang sudah terbit, periksa apakah butir pengetahuannya sudah dibuat, bersumber, dan bermasa berlaku; tandai butir pengetahuan dari artikel yang belum lolos cek fakta.",
       "suggested_action": "Panggil vibeasik_knowledge_learn per butir terverifikasi dengan domain bidang artikel, sumber, dan masa berlaku; tautkan kunci node di catatan artikel.",
       "severity": "medium"
+    },
+    {
+      "id": "KONTEN-014",
+      "level": "component",
+      "title": "Setiap Artikel Siap Dibagikan (Gambar, Judul, Deskripsi)",
+      "rule": "Setiap artikel WAJIB siap dibagikan sebelum terbit, agar saat tautannya dikirim di media sosial (Facebook, X, LinkedIn) maupun aplikasi pesan (WhatsApp, Messenger, Telegram) tampil kartu pratinjau berisi gambar, judul, dan deskripsi singkat: (a) gambar sampul khusus artikel 1200x630 piksel (rasio 1.91:1), JPEG/PNG/WebP di bawah ±300 KB agar WhatsApp mau menampilkannya, berisi subjek artikel dengan teks seminimal mungkin, dengan URL absolut https; (b) og:title dari judul artikel (±60 karakter) dan og:description ringkasan 1-2 kalimat (±110-160 karakter) yang ditulis khusus, bukan potongan paragraf pertama; (c) og:type article, og:url = canonical, og:image:width/height/alt, article:published_time dan article:modified_time; (d) twitter:card summary_large_image; (e) JSON-LD Article/BlogPosting dengan headline, image, author, datePublished, dateModified. Semua tag ada di HTML server (lihat SEO-002 sampai SEO-004). Artikel tanpa sampul dan meta bagikan tidak boleh terbit.",
+      "rationale": "Sebagian besar pembaca blog datang dari tautan yang dibagikan. Perayap WhatsApp, Facebook, dan Messenger tidak menjalankan JavaScript dan menolak gambar yang terlalu besar atau ber-URL relatif; tautan tanpa kartu pratinjau jauh lebih jarang diklik.",
+      "inspection_check": "Ambil HTML mentah tiap halaman artikel (curl dengan user-agent facebookexternalhit dan WhatsApp); pastikan og:title, og:description, og:image (absolut https, dapat diunduh, 1200x630, di bawah ±300 KB), og:url, twitter:card, dan JSON-LD Article ada dan berisi data artikel itu, bukan data situs umum.",
+      "suggested_action": "Tambahkan field cover_image, cover_alt, share_title, share_description di data artikel; buat sampul per artikel (gambar AI atau desain) lalu kompres ke 1200x630; isi useSeoMeta/JSON-LD dari data artikel; uji dengan Facebook Sharing Debugger, LinkedIn Post Inspector, dan kirim tautan uji ke WhatsApp.",
+      "severity": "high"
     }
   ]
 }
