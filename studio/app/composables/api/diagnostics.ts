@@ -143,6 +143,12 @@ export const useDiagnosticsApi = () => {
     return await pollDiagJob<FeedbackResult>(apiBase, accepted, projectId)
   }
 
+  // AI menjatuhkan vonis sendiri atas temuan terbuka (model utama dulu, model kritis bila ragu)
+  const runAutoTriage = async (projectId: number): Promise<{ decided: { rule_id: string, verdict: string, confidence: number, findings: number, model: string, escalated?: boolean }[], skipped: number, failed: number, remaining: number }> => {
+    const accepted = await $fetch<DiagJobAccepted | any>(`${apiBase}/api/projects/${projectId}/diagnostics/auto-triage`, { method: 'POST' })
+    return await pollDiagJob<any>(apiBase, accepted, projectId)
+  }
+
   const getAuditLearning = async (projectId?: number): Promise<AuditLearningResponse> => {
     return await $fetch<AuditLearningResponse>(`${apiBase}/api/audit-learning`, { query: projectId ? { project_id: projectId } : {} })
   }
@@ -239,6 +245,7 @@ export const useDiagnosticsApi = () => {
     ignoreDiagnosticFinding,
     verifyDiagnosticFinding,
     recordFindingFeedback,
+    runAutoTriage,
     getAuditLearning,
     markAuditRuleUpdated,
     deleteAuditFeedback,
