@@ -33,7 +33,7 @@ Bentuk `Event` yang sudah ada, tanpa field baru:
 | `kind` | `"pageview"` |
 | `path` | pathname halaman, tanpa query/hash, maks 255 |
 | `route` | host halaman (huruf kecil, tanpa port); kosong = situs satu host |
-| `referer` | host perujuk luar saja; perujuk dari host yang sama dikosongkan |
+| `referer` | host perujuk saja; perujuk dari host yang sama tetap dikirim (engine memberinya label `(internal)`); kosong = tanpa perujuk |
 | `ua`, `ip`, `country`, `ts` | seperti request biasa |
 | `method`/`status` | `GET` / `200` (diabaikan engine) |
 
@@ -50,7 +50,7 @@ Event menambah `total_events` dan `last_event_at` sumber. Rangkuman disimpan di 
 | dim | gran | nilai |
 |---|---|---|
 | `page` | menit & jam | `host+path` bila host ada, selain itu `path`; bot tidak dihitung |
-| `pref` | jam | host perujuk, atau `(langsung)` (termasuk perujuk dari host yang sama) |
+| `pref` | jam | host perujuk; `(langsung)` = tanpa perujuk; `(internal)` = perujuk sama dengan host halaman (pindah halaman di situs yang sama) |
 | `pdev` | jam | kelas UA (`mobile`/`desktop`/`api`/`bot`/`unknown`); bot ikut di sini saja |
 | `pvis` | jam | 12 hex pertama `sha256(ip|ua|tanggal UTC|salt sumber)`; tanpa IP mentah; bot tidak |
 

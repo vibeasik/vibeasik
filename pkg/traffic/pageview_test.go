@@ -31,7 +31,7 @@ func TestIngestPageviewDims(t *testing.T) {
 	now := time.Now().UnixMilli()
 	evs := []Event{
 		pvEvent(now, "contoh.id", "/harga", "google.com", uaChrome, "1.1.1.1"),
-		pvEvent(now, "contoh.id", "/harga", "contoh.id", uaChrome, "1.1.1.1"), // pengunjung sama, perujuk sendiri
+		pvEvent(now, "contoh.id", "/harga", "contoh.id", uaChrome, "1.1.1.1"), // pengunjung sama, navigasi internal
 		pvEvent(now, "contoh.id", "/blog", "", uaPhone, "2.2.2.2"),
 		pvEvent(now, "", "/solo", "", uaChrome, "3.3.3.3"),
 		pvEvent(now, "contoh.id", "/harga", "", uaBot, "9.9.9.9"),
@@ -54,8 +54,8 @@ func TestIngestPageviewDims(t *testing.T) {
 	if count("h", "page", "/solo") != 1 || count("h", "page", "contoh.id/blog") != 1 {
 		t.Error("page tanpa host memakai path saja; dengan host memakai host+path")
 	}
-	if count("h", "pref", "google.com") != 1 || count("h", "pref", RefDirect) != 4 {
-		t.Errorf("pref salah: google=%d langsung=%d", count("h", "pref", "google.com"), count("h", "pref", RefDirect))
+	if count("h", "pref", "google.com") != 1 || count("h", "pref", RefDirect) != 3 || count("h", "pref", RefInternal) != 1 {
+		t.Errorf("pref salah: google=%d langsung=%d internal=%d", count("h", "pref", "google.com"), count("h", "pref", RefDirect), count("h", "pref", RefInternal))
 	}
 	if count("h", "pdev", "bot") != 1 || count("h", "pdev", "desktop") != 3 || count("h", "pdev", "mobile") != 1 {
 		t.Error("pdev: bot ikut, kelas lain terhitung")

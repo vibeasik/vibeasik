@@ -96,16 +96,13 @@ func pvPath(p string) (string, bool) {
 	return p, true
 }
 
-// pvReferrer = host perujuk saja; kosong bila tidak sah atau sama dengan host halaman.
+// pvReferrer = host perujuk saja (termasuk host yang sama = navigasi internal); kosong bila tidak sah.
 func pvReferrer(ref, host string) string {
 	u, err := url.Parse(ref)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return ""
 	}
-	if h := pvHost(u.Host); h != host {
-		return h
-	}
-	return ""
+	return pvHost(u.Host)
 }
 
 type pvBody struct {

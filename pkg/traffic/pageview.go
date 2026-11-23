@@ -15,11 +15,12 @@ import (
 
 // Dimensi kunjungan halaman (tabel traffic_dim_stats yang sama dengan dimensi lain).
 const (
-	DimPage    = "page" // host+path (atau path), menit & jam, tanpa bot
-	DimPageRef = "pref" // host perujuk atau RefDirect, jam
-	DimPageDev = "pdev" // kelas UA, jam (bot ikut)
-	DimPageVis = "pvis" // id pengunjung harian tanpa IP mentah, jam, tanpa bot
-	RefDirect  = "(langsung)"
+	DimPage     = "page"       // host+path (atau path), menit & jam, tanpa bot
+	DimPageRef  = "pref"       // host perujuk atau RefDirect, jam
+	DimPageDev  = "pdev"       // kelas UA, jam (bot ikut)
+	DimPageVis  = "pvis"       // id pengunjung harian tanpa IP mentah, jam, tanpa bot
+	RefDirect   = "(langsung)" // tanpa perujuk
+	RefInternal = "(internal)" // perujuk = host halaman sendiri (pindah halaman di situs yang sama)
 )
 
 const maxPages = 50
@@ -41,10 +42,13 @@ func pageValue(host, path string) string {
 	return host + path
 }
 
-// referrerOf = host perujuk luar; kosong atau sama dengan host halaman menjadi RefDirect.
+// referrerOf: kosong = RefDirect; sama dengan host halaman = RefInternal; selain itu host perujuk.
 func referrerOf(ref, host string) string {
-	if ref == "" || ref == host {
+	switch ref {
+	case "":
 		return RefDirect
+	case host:
+		return RefInternal
 	}
 	return ref
 }

@@ -79,11 +79,11 @@ func TestPageviewRecords(t *testing.T) {
 	}
 }
 
-func TestPageviewSameHostReferrerEmptied(t *testing.T) {
+func TestPageviewSameHostReferrerKept(t *testing.T) {
 	pvSetup(t)
 	pvPost(PageviewHandler(), `{"p":"/a","r":"https://contoh.id/x"}`, nil)
-	if ev := lastView(t); ev.Referer != "" {
-		t.Errorf("perujuk host sama harus kosong: %+v", ev)
+	if ev := lastView(t); ev.Referer != "contoh.id" {
+		t.Errorf("perujuk host sama harus dikirim apa adanya: %+v", ev)
 	}
 }
 
