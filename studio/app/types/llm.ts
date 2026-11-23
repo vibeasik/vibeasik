@@ -96,6 +96,50 @@ export interface LLMPoolModel {
   avg_ms?: number
   requests?: number
   fails?: number
+  /** Nama model dikenal (kelas ditebak dari nama). */
+  known?: boolean
+  /** Kelas yang ditetapkan pemilik (frontier/tinggi/menengah/ringan/off). */
+  class?: LLMModelClass
+}
+
+export type LLMModelClass = 'frontier' | 'tinggi' | 'menengah' | 'ringan' | 'off' | ''
+
+/** Pool otomatis satu keperluan: urutan model luar, lalu cadangan Claude Code lokal, lalu agent pemanggil. */
+export interface LLMPurposePool {
+  key: string
+  label: string
+  detail: string
+  purposes: string[]
+  critical?: boolean
+  tier: string
+  min: string
+  max: string
+  why: string
+  models: string[] | null
+  local?: string
+  fallback?: string
+}
+
+export interface LLMProviderSync {
+  config_id: number
+  config: string
+  catalog: number
+  added?: string[]
+  removed?: string[]
+  probed?: string[]
+  failed?: string[]
+  error?: string
+}
+
+export interface LLMModelSyncReport {
+  at: string
+  providers: LLMProviderSync[] | null
+}
+
+export interface LLMPurposePoolsResponse {
+  pools: LLMPurposePool[]
+  local: { available: boolean, models: Record<string, string>, used_today: number, daily_max: number, skip: string[] }
+  sync: LLMModelSyncReport | null
 }
 
 /** Status satu provider LLM (alamat + akun). Kuota habis = blocked sampai diaktifkan lagi. */

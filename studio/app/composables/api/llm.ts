@@ -96,6 +96,11 @@ export const useLlmApi = () => {
 
   const resetLLMProvider = async (id: number) => await $fetch(`${apiBase}/api/llm/providers/${id}/reset`, { method: 'POST' })
 
+  // Pool otomatis per keperluan, tarik model dari katalog penyedia, kelas model pilihan pemilik (Pro).
+  const getLLMPurposePools = async (): Promise<LLMPurposePoolsResponse> => await $fetch<LLMPurposePoolsResponse>(`${apiBase}/api/llm/purpose-pools`)
+  const syncLLMModels = async (): Promise<LLMModelSyncReport> => await $fetch<LLMModelSyncReport>(`${apiBase}/api/llm/models/sync`, { method: 'POST' })
+  const setLLMModelClass = async (model: string, cls: LLMModelClass) => await $fetch(`${apiBase}/api/llm/model-class`, { method: 'PUT', body: { model, class: cls } })
+
   // Log request LLM per model & kesehatan model (Pro).
   const getLLMLog = async (query: { model?: string, host?: string, kind?: string, failed?: boolean, hours?: number, limit?: number } = {}) =>
     await $fetch<{ logs: LLMRequestLog[] }>(`${apiBase}/api/llm/log`, { query: { ...query, failed: query.failed ? 1 : undefined } })
@@ -138,6 +143,9 @@ export const useLlmApi = () => {
     discoverLLMModels,
     getLLMPool,
     resetLLMProvider,
+    getLLMPurposePools,
+    syncLLMModels,
+    setLLMModelClass,
     getLLMLog,
     getLLMModelHealth,
     resetLLMModelHealth,
