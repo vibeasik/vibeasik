@@ -102,7 +102,7 @@ export interface LLMPoolModel {
   class?: LLMModelClass
 }
 
-export type LLMModelClass = 'frontier' | 'tinggi' | 'menengah' | 'ringan' | 'off' | ''
+export type LLMModelClass = 'frontier' | 'tinggi' | 'menengah' | 'ringan' | 'off' | 'cadangan' | ''
 
 /** Pool otomatis satu keperluan: urutan model luar, lalu cadangan Claude Code lokal, lalu agent pemanggil. */
 export interface LLMPurposePool {
@@ -117,6 +117,8 @@ export interface LLMPurposePool {
   why: string
   models: string[] | null
   local?: string
+  /** Cadangan terakhir setelah Claude Code lokal (model berkelas "cadangan", mis. Gemini web). */
+  last?: string[]
   fallback?: string
 }
 
