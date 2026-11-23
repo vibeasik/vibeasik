@@ -19,7 +19,7 @@ const sourceId = ref<number | null>(null)
 const windowKey = ref<TrafficWindow>('1h')
 const report = ref<TrafficReport | null>(null)
 const recent = ref<TrafficRecentEvent[]>([])
-const tab = ref<'advice' | 'routes' | 'origin' | 'live' | 'setup'>('advice')
+const tab = ref<'advice' | 'routes' | 'pages' | 'origin' | 'live' | 'setup'>('advice')
 const loading = ref(false)
 const syncing = ref(false)
 const showCreate = ref(false)
@@ -87,7 +87,6 @@ watch(activeProjectId, async () => {
   if (!sourceId.value) loadReport()
 })
 
-
 const handleCreated = async (src: TrafficSource) => {
   await loadSources()
   sourceId.value = src.id
@@ -147,6 +146,7 @@ const connection = computed(() => {
 const tabs = computed(() => [
   { value: 'advice', label: 'Saran Optimasi', icon: 'i-lucide-lightbulb', badge: alertCount.value || undefined },
   { value: 'routes', label: 'Endpoint', icon: 'i-lucide-route' },
+  { value: 'pages', label: 'Halaman', icon: 'i-lucide-file-text' },
   { value: 'origin', label: 'Asal Traffic', icon: 'i-lucide-globe' },
   { value: 'live', label: 'Live', icon: 'i-lucide-radio' },
   { value: 'setup', label: 'Pemasangan', icon: 'i-lucide-plug' }
@@ -392,6 +392,7 @@ onBeforeUnmount(() => {
             :project-id="source?.project_id"
           />
           <TrafficRouteTable v-else-if="tab === 'routes'" :routes="report.routes" :groups="report.groups" />
+          <TrafficPagesPanel v-else-if="tab === 'pages'" :report="report" @setup="tab = 'setup'" />
           <div v-else-if="tab === 'origin'" class="space-y-4">
             <TrafficBreakdown :report="report" />
             <TrafficGeoBreakdown :report="report" />

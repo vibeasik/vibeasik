@@ -54,6 +54,9 @@ export interface TrafficTotals {
   instances: number
   read_share: number
   span_minutes: number
+  /** Pageview: hanya ada bila backend mendukung event pageview. */
+  page_views?: number
+  visitors?: number
 }
 
 export interface TrafficPoint {
@@ -104,6 +107,25 @@ export interface TrafficKV {
   share: number
 }
 
+export interface TrafficPageRow {
+  page: string
+  host: string
+  path: string
+  views: number
+  share: number
+}
+
+export interface TrafficPageKV {
+  value: string
+  count: number
+  share: number
+}
+
+export interface TrafficPageViewPoint {
+  t: number
+  views: number
+}
+
 export interface TrafficIPRow {
   ip: string
   count: number
@@ -151,6 +173,11 @@ export interface TrafficReport {
   not_found: TrafficKV[]
   top_ips: TrafficIPRow[]
   recommendations: TrafficRecommendation[]
+  /** Pageview (bisa tidak ada/kosong pada backend lama). */
+  pages?: TrafficPageRow[]
+  page_referers?: TrafficPageKV[]
+  page_devices?: TrafficPageKV[]
+  page_series?: TrafficPageViewPoint[]
 }
 
 export interface TrafficRecentEvent {

@@ -3,7 +3,7 @@ import type { TrafficPoint } from '~/types'
 
 // Satu grafik = satu ukuran (tidak ada dua sumbu Y): "volume" = batang request (5xx ditumpuk, warna status),
 // "latency" = garis p95. Hover menampilkan crosshair + tooltip per ember waktu.
-const props = defineProps<{ points: TrafficPoint[], mode: 'volume' | 'latency', stepSec: number }>()
+const props = defineProps<{ points: TrafficPoint[], mode: 'volume' | 'latency', stepSec: number, unit?: string }>()
 
 const wrap = ref<HTMLElement | null>(null)
 const width = ref(600)
@@ -82,7 +82,7 @@ const tipLeft = computed(() => hover.value === null ? 0 : Math.min(width.value -
 
 <template>
   <div ref="wrap" class="relative w-full select-none">
-    <svg :width="width" :height="height" class="block" role="img" :aria-label="mode === 'volume' ? 'Jumlah request per waktu' : 'Latensi p95 per waktu'" @mousemove="onMove" @mouseleave="hover = null">
+    <svg :width="width" :height="height" class="block" role="img" :aria-label="mode === 'volume' ? `Jumlah ${unit || 'request'} per waktu` : 'Latensi p95 per waktu'" @mousemove="onMove" @mouseleave="hover = null">
       <g>
         <line v-for="t in ticks" :key="t.v" :x1="pad.l" :x2="width - pad.r" :y1="t.y" :y2="t.y" class="stroke-neutral-200 dark:stroke-neutral-800" stroke-width="1" />
         <text v-for="t in ticks" :key="'l' + t.v" :x="pad.l - 6" :y="t.y + 3" text-anchor="end" class="fill-neutral-500 text-xs">{{ fmtTick(t.v) }}</text>
@@ -134,11 +134,11 @@ const tipLeft = computed(() => hover.value === null ? 0 : Math.min(width.value -
       <div class="font-semibold text-neutral-900 dark:text-white">
         {{ timeLabel(hp.t) }}
       </div>
-      <div>{{ fmtNum(hp.requests) }} request</div>
+      <div>{{ fmtNum(hp.requests) }} {{ unit || 'request' }}</div>
       <div v-if="hp.err_5xx || hp.err_4xx" class="text-neutral-500">
         5xx {{ fmtNum(hp.err_5xx) }} · 4xx {{ fmtNum(hp.err_4xx) }}
       </div>
-      <div v-if="hp.requests">
+      <div v-if="hp.requests && mode === 'latency'">
         p95 {{ fmtMs(hp.p95) }} · rata² {{ fmtMs(hp.avg_ms) }}
       </div>
     </div>
