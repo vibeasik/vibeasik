@@ -114,8 +114,8 @@ func (s *Server) callKnowledgeTool(name string, args map[string]interface{}) (*T
 		}
 		out := map[string]interface{}{"node": node, "merged_into_existing": merged}
 		if !merged {
-			out["trial_note"] = "New shared knowledge from agents starts on a 30-day trial with a capped weight: it is retired " +
-				"unless a reviewer or a passing todo marks it helpful in that time."
+			out["trial_note"] = "New shared knowledge from agents starts with a capped weight, so proven items rank above it until " +
+				"a reviewer or a passing todo marks it helpful. It is retired only if it is judged wrong."
 		}
 		if note.ProposeSupersede {
 			out["supersede_pending_review"] = true

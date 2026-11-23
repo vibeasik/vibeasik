@@ -50,26 +50,21 @@ func TestExpireShared(t *testing.T) {
 	}
 	day := 24 * time.Hour
 	gone := []uint{
-		mk("qa lama tak pernah muncul", models.KnowledgeSrcReview, 31*day, nil),
-		mk("qa sering muncul tanpa bukti", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.Uses = 5 }),
-		mk("qa 90 hari jarang muncul", models.KnowledgeSrcReview, 91*day, func(n *models.KnowledgeNode) { n.Uses = 2 }),
-		mk("agent lama tanpa bukti", models.KnowledgeSrcAgent, 40*day, nil),
-		mk("riset celah lama", models.KnowledgeSrcGap, 31*day, nil),
-		mk("vonis audit menganggur", models.KnowledgeSrcVerdict, 61*day, nil),
+		mk("qa terbukti keliru", models.KnowledgeSrcReview, 5*day, func(n *models.KnowledgeNode) { n.Harmful = 2 }),
+		mk("agent menyesatkan", models.KnowledgeSrcAgent, 40*day, func(n *models.KnowledgeNode) { n.Harmful = 3; n.Uses = 6 }),
+		mk("riset celah keliru", models.KnowledgeSrcGap, 1*day, func(n *models.KnowledgeNode) { n.Harmful = 2 }),
 	}
 	kept := []uint{
-		mk("qa muda", models.KnowledgeSrcReview, 20*day, nil),
-		mk("qa jarang muncul menunggu vonis", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.Uses = 4 }),
-		mk("qa lama terbukti", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.Helpful = 1 }),
-		mk("agent lama bukti lemah", models.KnowledgeSrcAgent, 31*day, func(n *models.KnowledgeNode) { n.WeakHelpful = 1 }),
-		mk("manual lama", models.KnowledgeSrcManual, 90*day, nil),
-		mk("promosi lama", models.KnowledgeSrcPromoted, 90*day, nil),
-		mk("vonis audit dipakai", models.KnowledgeSrcVerdict, 61*day, func(n *models.KnowledgeNode) { n.Uses = 1 }),
-		mk("vonis audit 40 hari", models.KnowledgeSrcVerdict, 40*day, nil),
-		mk("qa pribadi", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.OwnerEmployeeID = &emp }),
-		mk("guideline berkas", models.KnowledgeSrcGuideline, 90*day, func(n *models.KnowledgeNode) { n.Key = "guideline:x" }),
+		mk("qa lama tak pernah muncul", models.KnowledgeSrcReview, 200*day, nil),
+		mk("qa sering muncul tanpa bukti", models.KnowledgeSrcReview, 120*day, func(n *models.KnowledgeNode) { n.Uses = 9 }),
+		mk("qa sekali keliru", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.Harmful = 1 }),
+		mk("qa keliru lemah saja", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.WeakHarmful = 5 }),
+		mk("qa pernah terbukti", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.Helpful = 1; n.Harmful = 2 }),
+		mk("vonis audit menganggur", models.KnowledgeSrcVerdict, 200*day, nil),
+		mk("manual keliru dua kali", models.KnowledgeSrcManual, 90*day, func(n *models.KnowledgeNode) { n.Harmful = 2 }),
+		mk("qa pribadi keliru", models.KnowledgeSrcReview, 31*day, func(n *models.KnowledgeNode) { n.OwnerEmployeeID = &emp; n.Harmful = 2 }),
 	}
-	if got := expireShared(db, now); got != len(gone) {
+	if got := expireShared(db); got != len(gone) {
 		t.Errorf("dipensiunkan %d, ingin %d", got, len(gone))
 	}
 	status := func(id uint) string {

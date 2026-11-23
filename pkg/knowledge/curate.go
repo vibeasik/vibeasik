@@ -42,7 +42,7 @@ type Report struct {
 	Offered  int    `json:"offered"` // tawaran pengalaman baru ke pegawai lain (adopt.go)
 	Decided  int    `json:"decided"` // masa coba adopsi yang ditutup
 	Demoted  int    `json:"demoted"` // patokan hasil promosi yang ditandai perlu ditinjau
-	Expired  int    `json:"expired"` // butir bersama yang gagal masa coba / lama menganggur (trial.go)
+	Expired  int    `json:"expired"` // butir masa coba yang terbukti keliru (trial.go)
 	Nodes    int    `json:"nodes"`
 	Took     string `json:"took"`
 }
@@ -101,7 +101,7 @@ func Curate(db *gorm.DB) Report {
 	r.Decided = decideTrials(db, time.Now())
 	r.Promoted = promote(db)
 	r.Retired, r.Flagged = prune(db)
-	r.Expired = expireShared(db, time.Now())
+	r.Expired = expireShared(db)
 	r.Demoted = demote(db, time.Now())
 	r.Offered = offerShares(db, time.Now())
 	r.Outdated = flagOutdated(db, time.Now())
