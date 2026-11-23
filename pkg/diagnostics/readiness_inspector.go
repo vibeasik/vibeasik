@@ -250,9 +250,11 @@ func inspectSEOReadiness(comp *models.Component) []models.Finding {
 			"Tidak ada /llms.txt. Berkas ringkasan ini memberi asisten AI peta situs yang ringkas: siapa pemiliknya, apa yang ditawarkan, dan tautan halaman terpenting.",
 			"Buat public/llms.txt berformat Markdown: judul, satu paragraf ringkasan, dan daftar tautan halaman utama dengan keterangan satu baris. Lihat patokan SEO-010."},
 	}
+	pageFindings, scanned := inspectSharePages(comp)
 	var findings []models.Finding
 	for _, c := range checks {
-		if !c.missing {
+		// Temuan per halaman menggantikan temuan per situs untuk masalah yang sama (tanpa temuan dobel).
+		if !c.missing || (c.id == "SEO-NO-OG-IMAGE" && scanned > 0) {
 			continue
 		}
 		findings = append(findings, models.Finding{
@@ -267,5 +269,6 @@ func inspectSEOReadiness(comp *models.Component) []models.Finding {
 			TheoryBasis: "Open Graph protocol, Google Search Central (SEO Starter Guide, structured data) & konvensi llms.txt.",
 		})
 	}
-	return findings
+	findings = append(findings, pageFindings...)
+	return append(findings, inspectSiteIcons(comp)...)
 }

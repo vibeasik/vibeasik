@@ -66,13 +66,13 @@ func TestSEOReadiness(t *testing.T) {
 	comp := &models.Component{Role: models.RoleFrontendClient, AbsolutePath: dir, RelativePath: "web", Framework: "nuxt"}
 
 	got := ruleSet(inspectSEOReadiness(comp))
-	for _, id := range []string{"SEO-SPA-ONLY", "SEO-NO-OG-IMAGE", "SEO-NO-ROBOTS", "SEO-NO-SITEMAP", "SEO-NO-STRUCTURED-DATA", "SEO-NO-LLMS-TXT"} {
+	for _, id := range []string{"SEO-SPA-ONLY", RuleShareMissing, "SEO-NO-ROBOTS", "SEO-NO-SITEMAP", "SEO-NO-STRUCTURED-DATA", "SEO-NO-LLMS-TXT"} {
 		f, ok := got[id]
 		if !ok {
 			t.Errorf("expected %s", id)
 			continue
 		}
-		if f.TargetFile != filepath.Join("web", "nuxt.config.ts") {
+		if id != RuleShareMissing && f.TargetFile != filepath.Join("web", "nuxt.config.ts") {
 			t.Errorf("%s: target = %s", id, f.TargetFile)
 		}
 	}
@@ -81,6 +81,8 @@ func TestSEOReadiness(t *testing.T) {
 	writeFixture(t, dir, "app/app.vue", "<script setup>\nuseSeoMeta({ ogImage: 'https://example.com/og.jpg' })\nuseHead({ script: [{ type: 'application/ld+json', innerHTML: '{}' }] })\n</script>\n")
 	writeFixture(t, dir, "public/robots.txt", "User-agent: *\nAllow: /\n")
 	writeFixture(t, dir, "public/llms.txt", "# Situs\n")
+	writeFixture(t, dir, "app/pages/index.vue", completeNuxtPage)
+	writeBrandIcons(t, dir)
 	if got := inspectSEOReadiness(comp); len(got) != 0 {
 		t.Fatalf("ready website must have no findings, got %v", ruleSet(got))
 	}
