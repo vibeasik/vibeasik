@@ -28,6 +28,7 @@ Berkas-berkas dalam folder ini dikelompokkan berdasarkan domain agar mudah dimai
 | `10_testing_dan_quality_assurance.json` | `testing_dan_quality_assurance` | Unit test coverage, integration test, test isolation, regression test |
 | `11_error_handling_dan_observability.json` | `error_handling_dan_observability` | Structured logging, error wrapping, panic recovery, graceful shutdown |
 | `12_devops_dan_deployment.json` | `devops_dan_deployment` | Multi-stage Dockerfile, .dockerignore, semantic versioning, reproducible build |
+| `15_konten_dan_penulisan.json` | `konten_dan_penulisan` | Tahapan menulis artikel, pemilihan kata berdasar teori, kritik otomatis, cek angka/kutipan/fakta, sumber primer topik profesional, artikel → pengetahuan |
 
 ---
 

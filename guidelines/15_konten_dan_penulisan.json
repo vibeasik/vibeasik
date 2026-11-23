@@ -1,0 +1,137 @@
+{
+  "category": "konten_dan_penulisan",
+  "name": "Konten & Penulisan Artikel (Blog, Panduan, Artikel Profesional)",
+  "description": "Patokan menulis artikel blog dan konten website yang bisa dipercaya: tahapan kerja dari brief sampai terbit, pemilihan kata yang berdasar teori bahasa dan keterbacaan, dasar yang jelas untuk setiap klaim, kritik otomatis atas bagian yang lemah, cek ulang angka, kutipan, dan fakta, serta mengubah artikel yang sudah diverifikasi menjadi pengetahuan. Berlaku untuk berkas konten (Markdown/MDX, data artikel di CMS atau basis data) dan tugas menulis yang diberikan ke agent AI.",
+  "guidelines": [
+    {
+      "id": "KONTEN-001",
+      "level": "project",
+      "title": "Tahapan Penulisan Wajib Berurutan",
+      "rule": "Setiap artikel WAJIB melewati tahapan berurutan: (1) brief — tujuan, pembaca sasaran, satu pesan utama, kata kunci; (2) riset — kumpulkan sumber dan catat tautannya; (3) kerangka — judul bagian dan poin per bagian; (4) draf; (5) kritik otomatis (KONTEN-007); (6) cek fakta, angka, dan kutipan (KONTEN-006, KONTEN-008); (7) revisi; (8) terbit dengan tanggal; (9) ekstrak pengetahuan (KONTEN-013). Tahap yang dilewati dicatat beserta alasannya.",
+      "rationale": "Artikel yang langsung ditulis tanpa brief dan riset cenderung melebar, berisi klaim tanpa dasar, dan sulit diperiksa. Tahapan yang tetap membuat mutu bisa diukur per tahap dan kesalahan ketahuan sebelum terbit.",
+      "inspection_check": "Untuk tugas menulis, periksa adanya brief, daftar sumber, kerangka, laporan kritik, dan laporan cek fakta di catatan tugas atau di samping berkas artikel; tandai artikel terbit yang tidak punya jejak tahap riset dan cek fakta.",
+      "suggested_action": "Simpan jejak kerja per artikel (mis. content/<slug>/brief.md, sumber.md, kritik.md, cek-fakta.md) atau di catatan todo; agent AI melaporkan tiap tahap sebelum lanjut ke tahap berikutnya.",
+      "severity": "high"
+    },
+    {
+      "id": "KONTEN-002",
+      "level": "component",
+      "title": "Pemilihan Kata Berdasar Teori Bahasa dan Keterbacaan",
+      "rule": "Pemilihan kata WAJIB bisa dipertanggungjawabkan dengan teori, bukan selera: (a) bahasa Indonesia mengikuti KBBI dan EYD Edisi V; (b) prinsip bahasa sederhana (plain language, ISO 24495-1): kalimat aktif, satu gagasan per kalimat, rata-rata kalimat pendek (sekitar 15-20 kata), kata umum lebih dulu daripada istilah; (c) istilah teknis dijelaskan saat pertama muncul lalu dipakai konsisten (satu konsep = satu istilah); (d) istilah asing yang punya padanan baku memakai padanannya, istilah yang belum punya padanan ditulis miring atau diberi penjelasan; (e) hindari kata penguat kosong (sangat, sungguh, luar biasa, revolusioner) dan klaim superlatif tanpa bukti.",
+      "rationale": "Teori keterbacaan (beban kognitif, panjang kalimat, keakraban kata) dan standar bahasa sederhana terbukti menaikkan pemahaman pembaca awam maupun profesional. Kata yang dipilih dengan dasar juga bisa dikritik secara objektif oleh agent pemeriksa.",
+      "inspection_check": "Hitung rata-rata panjang kalimat dan proporsi kalimat pasif; cari istilah yang dipakai bergantian untuk konsep yang sama, istilah teknis tanpa penjelasan pertama, dan kata penguat kosong; cocokkan ejaan dengan KBBI/EYD V.",
+      "suggested_action": "Pecah kalimat lebih dari 25 kata, ubah pasif yang tidak perlu menjadi aktif, buat glosarium istilah per artikel, dan ganti kata penguat dengan data atau contoh konkret.",
+      "severity": "medium"
+    },
+    {
+      "id": "KONTEN-003",
+      "level": "component",
+      "title": "Struktur Artikel: Inti di Depan, Judul Jujur",
+      "rule": "Artikel WAJIB menaruh jawaban atau inti di paragraf pembuka (piramida terbalik), memakai subjudul yang informatif (bukan 'Pendahuluan'/'Lain-lain'), dan ditutup dengan kesimpulan atau langkah yang bisa dilakukan pembaca. Judul menjanjikan hanya apa yang benar-benar dibahas; tidak boleh clickbait atau melebih-lebihkan.",
+      "rationale": "Pembaca web memindai, bukan membaca berurutan; mesin pencari dan asisten AI juga mengutip bagian awal dan subjudul. Judul yang ingkar janji menurunkan kepercayaan dan waktu baca.",
+      "inspection_check": "Periksa apakah dua kalimat pertama sudah menjawab pertanyaan judul, apakah tiap subjudul bisa dipahami tanpa membaca isinya, dan apakah judul sesuai isi.",
+      "suggested_action": "Tulis ringkasan 2-3 kalimat di awal, ubah subjudul menjadi pernyataan atau pertanyaan spesifik, dan tambahkan bagian penutup berisi langkah lanjut.",
+      "severity": "medium"
+    },
+    {
+      "id": "KONTEN-004",
+      "level": "component",
+      "title": "Klaim Teknologi Punya Dasar yang Bisa Diperiksa",
+      "rule": "Dalam artikel teknologi, setiap klaim teknis (fitur, perilaku, performa, keamanan, perbandingan) WAJIB punya dasar yang bisa diperiksa ulang: dokumentasi resmi, spesifikasi/RFC, catatan rilis, kode sumber, atau pengukuran yang langkahnya ditulis. Versi perangkat lunak dan tanggal pengujian disebut. Pendapat penulis ditandai sebagai pendapat.",
+      "rationale": "Teknologi berubah cepat; klaim tanpa versi dan sumber cepat basi dan menyesatkan. Pembaca teknis menilai kredibilitas dari kemampuan mengulang klaim.",
+      "inspection_check": "Ekstrak kalimat yang berisi klaim teknis; tandai yang tidak punya tautan sumber, tidak menyebut versi, atau berupa angka performa tanpa cara ukur.",
+      "suggested_action": "Tambahkan tautan ke dokumentasi resmi atau catatan rilis, sebut versi (mis. 'Go 1.26', 'Nuxt 4.2'), dan untuk benchmark tulis perangkat keras, perintah, dan hasil mentahnya.",
+      "severity": "high"
+    },
+    {
+      "id": "KONTEN-005",
+      "level": "component",
+      "title": "Topik Profesional Wajib Berdasar Sumber Primer",
+      "rule": "Artikel bidang profesional (kesehatan, hukum, pajak, keuangan, keselamatan kerja, teknik sipil, psikologi, dan bidang lain yang memengaruhi keputusan penting pembaca) WAJIB berdasar sumber primer yang berwenang: peraturan perundang-undangan beserta nomor dan pasalnya, pedoman lembaga resmi, standar (SNI/ISO), atau jurnal ilmiah bertinjauan sejawat. Sebutkan tanggal berlaku aturan, batas cakupan artikel, dan anjuran berkonsultasi dengan tenaga profesional. Bila memungkinkan, artikel ditinjau oleh orang yang berkompeten di bidangnya dan namanya dicantumkan.",
+      "rationale": "Konten yang memengaruhi kesehatan, keuangan, atau status hukum pembaca (YMYL) berisiko merugikan bila keliru; mesin pencari pun menilai konten jenis ini dengan standar pengalaman, keahlian, kewenangan, dan kepercayaan (E-E-A-T) yang lebih ketat.",
+      "inspection_check": "Kenali artikel bertopik profesional dari kata kunci bidangnya; periksa adanya rujukan primer (nomor peraturan, lembaga, DOI jurnal), tanggal berlaku, batas cakupan, dan penafian; tandai yang hanya merujuk blog atau berita.",
+      "suggested_action": "Ganti rujukan sekunder dengan sumber primernya, tambahkan kotak 'Dasar hukum/ilmiah' dan 'Terakhir diperiksa', serta penafian singkat dan peninjau ahli.",
+      "severity": "critical"
+    },
+    {
+      "id": "KONTEN-006",
+      "level": "component",
+      "title": "Setiap Angka Punya Sumber, Tahun, dan Satuan",
+      "rule": "Setiap angka (statistik, persentase, harga, jumlah pengguna, hasil ukur) WAJIB disertai sumber, tahun atau tanggal data, dan satuannya, serta dicek ulang ke sumber aslinya sebelum terbit. Angka hasil hitungan penulis menuliskan cara hitungnya. Angka yang tidak bisa diverifikasi dihapus atau ditandai jelas sebagai perkiraan. Agent AI tidak boleh mengarang angka.",
+      "rationale": "Angka adalah bagian artikel yang paling sering dikutip ulang dan paling sering salah (salah satuan, data lama, angka hasil halusinasi model). Satu angka keliru merusak kepercayaan pada seluruh artikel.",
+      "inspection_check": "Ekstrak semua angka dari artikel; untuk tiap angka cari sumber di kalimat atau catatan kaki terdekat, tahun data, dan satuan; buka sumbernya dan cocokkan nilainya.",
+      "suggested_action": "Buat tabel cek angka (angka · sumber · tahun · cocok/tidak) di laporan cek fakta; perbaiki atau hapus angka yang tidak cocok sebelum terbit.",
+      "severity": "critical"
+    },
+    {
+      "id": "KONTEN-007",
+      "level": "project",
+      "title": "Kritik Otomatis atas Bagian yang Lemah",
+      "rule": "Draf WAJIB dikritik oleh pemeriksa terpisah (agent atau model kedua, bukan penulis yang sama dalam satu putaran) memakai rubrik tetap: kesesuaian dengan brief, kekuatan argumen dan alur logika, kecukupan bukti per klaim, kejelasan bahasa (KONTEN-002), struktur (KONTEN-003), keseimbangan sudut pandang, dan kebaruan isi. Setiap bagian diberi nilai dan alasan; bagian bernilai rendah ditulis ulang lalu dinilai lagi. Maksimal dua putaran revisi; sisa kelemahan dicatat di laporan.",
+      "rationale": "Penulis (manusia maupun model) sulit melihat kelemahan tulisannya sendiri. Kritik terpisah dengan rubrik tetap membuat perbaikan terarah ke bagian yang lemah, bukan menulis ulang seluruh artikel.",
+      "inspection_check": "Periksa adanya laporan kritik per bagian dengan nilai dan alasan, bukti bahwa bagian bernilai rendah direvisi, dan nilai sesudah revisi.",
+      "suggested_action": "Jalankan pemeriksa dengan rubrik di atas, minta keluaran per bagian (nilai 1-5, kelemahan, saran), lalu revisi hanya bagian bernilai di bawah 4.",
+      "severity": "high"
+    },
+    {
+      "id": "KONTEN-008",
+      "level": "component",
+      "title": "Cek Fakta dan Kutipan Sebelum Terbit",
+      "rule": "Sebelum terbit, semua klaim faktual WAJIB diekstrak menjadi daftar dan masing-masing diberi status: terverifikasi (dengan sumber), bertentangan (sumber berbeda pendapat — sebutkan keduanya), atau tidak dapat diverifikasi (hapus atau lunakkan). Kutipan langsung dicocokkan kata per kata dengan sumber aslinya beserta nama orang dan konteksnya; tautan sumber diperiksa masih hidup. Artikel tidak terbit selama ada klaim penting yang berstatus tidak dapat diverifikasi.",
+      "rationale": "Model bahasa bisa menghasilkan fakta, kutipan, dan rujukan yang terdengar meyakinkan tetapi tidak ada. Pemeriksaan per klaim adalah satu-satunya cara memastikan artikel tidak menyebarkan informasi keliru.",
+      "inspection_check": "Periksa laporan cek fakta: jumlah klaim, status tiap klaim, kutipan yang dicocokkan, dan tautan yang dicek; tandai rujukan yang tidak bisa dibuka atau tidak memuat isi yang dikutip.",
+      "suggested_action": "Pakai pencarian web dan buka sumber aslinya untuk tiap klaim; simpan potongan teks sumber yang mendukung klaim di laporan; ganti tautan mati dengan arsip atau sumber lain.",
+      "severity": "critical"
+    },
+    {
+      "id": "KONTEN-009",
+      "level": "component",
+      "title": "Contoh Kode dan Langkah Teknis Teruji",
+      "rule": "Contoh kode, perintah, dan langkah instalasi di artikel WAJIB sudah dijalankan pada versi yang disebut di artikel, lengkap (impor, konfigurasi yang dibutuhkan), dan menampilkan keluaran yang diharapkan. Kode yang sengaja tidak lengkap ditandai sebagai potongan.",
+      "rationale": "Pembaca artikel teknologi menyalin kode apa adanya; kode yang gagal dijalankan adalah keluhan paling umum dan langsung meruntuhkan kepercayaan.",
+      "inspection_check": "Ambil blok kode dari artikel, jalankan di lingkungan bersih sesuai versi yang disebut, dan bandingkan keluarannya.",
+      "suggested_action": "Simpan contoh kode sebagai berkas yang bisa diuji (mis. examples/<slug>/) dan jalankan sebagai test sebelum terbit.",
+      "severity": "high"
+    },
+    {
+      "id": "KONTEN-010",
+      "level": "component",
+      "title": "Orisinal, Beratribusi, dan Jujur soal AI",
+      "rule": "Artikel WAJIB orisinal: tidak menyalin atau memparafrasa rapat tulisan orang lain; kutipan pendek diberi atribusi dan tautan. Gambar dan data pihak lain dipakai sesuai lisensinya. Gambar buatan AI dan peran AI dalam penulisan dicatat sesuai kebijakan situs. Tidak menyebut nama orang, klien, atau data asli tanpa izin.",
+      "rationale": "Konten salinan melanggar hak cipta, diturunkan peringkatnya oleh mesin pencari, dan merusak reputasi penerbit.",
+      "inspection_check": "Bandingkan paragraf dengan sumber riset untuk kemiripan tinggi; periksa atribusi kutipan dan lisensi gambar; cari nama orang atau data pribadi.",
+      "suggested_action": "Tulis ulang bagian yang terlalu mirip dengan kata dan susunan sendiri, tambahkan atribusi, dan ganti gambar berlisensi tidak jelas.",
+      "severity": "high"
+    },
+    {
+      "id": "KONTEN-011",
+      "level": "component",
+      "title": "Penulis, Tanggal, dan Jadwal Tinjau Ulang",
+      "rule": "Setiap artikel WAJIB menampilkan penulis (dan peninjau bila ada), tanggal terbit, dan tanggal diperbarui. Artikel teknologi dan profesional punya jadwal tinjau ulang (mis. 6-12 bulan, atau saat versi/aturan yang dibahas berubah); artikel yang isinya sudah tidak berlaku diperbarui atau diberi catatan usang.",
+      "rationale": "Pembaca dan mesin pencari menilai kesegaran dan siapa yang bertanggung jawab atas isi. Artikel teknologi usang yang tetap tampil segar menyesatkan.",
+      "inspection_check": "Periksa metadata artikel (author, datePublished, dateModified) di halaman dan JSON-LD Article; tandai artikel teknologi yang tanggal perbaruannya lebih tua dari jadwal tinjau.",
+      "suggested_action": "Tambahkan field penulis, peninjau, published_at, updated_at, review_due di data artikel dan tampilkan di halaman serta JSON-LD (lihat SEO-007).",
+      "severity": "medium"
+    },
+    {
+      "id": "KONTEN-012",
+      "level": "project",
+      "title": "Brief Konten Berisi Pembaca dan Tujuan yang Terukur",
+      "rule": "Brief artikel WAJIB menyebut pembaca sasaran (awam, praktisi, pengambil keputusan), masalah atau pertanyaan yang dijawab, satu pesan utama, tindakan yang diharapkan dari pembaca, kata kunci/niat pencarian, dan panjang perkiraan. Artikel yang tidak menjawab pertanyaan nyata pembaca tidak ditulis.",
+      "rationale": "Tanpa pembaca dan tujuan yang jelas, pemilihan kata, kedalaman, dan contoh tidak punya patokan; kritik otomatis juga tidak punya ukuran kesesuaian.",
+      "inspection_check": "Periksa brief: ada pembaca sasaran, pertanyaan, pesan utama, tindakan, dan kata kunci; cocokkan isi artikel dengan brief.",
+      "suggested_action": "Pakai templat brief tetap dan jadikan brief bagian pertama yang dinilai pada kritik otomatis (KONTEN-007).",
+      "severity": "medium"
+    },
+    {
+      "id": "KONTEN-013",
+      "level": "global",
+      "title": "Artikel Terverifikasi Menjadi Pengetahuan",
+      "rule": "Setelah artikel terbit dan lolos cek fakta, pelajaran yang berguna lintas proyek WAJIB diekstrak menjadi butir pengetahuan: hanya klaim yang berstatus terverifikasi, masing-masing satu gagasan, disertai sumber, bidang, versi atau tanggal berlakunya (applies_to / masa berlaku), dan tautan ke artikelnya. Klaim yang bertentangan atau pendapat penulis tidak dijadikan pengetahuan. Saat artikel diperbarui, butir lama digantikan (supersede), bukan ditambah dobel.",
+      "rationale": "Riset dan cek fakta untuk satu artikel mahal; menyimpannya sebagai pengetahuan membuat artikel berikutnya dan pekerjaan agent lain lebih cepat dan lebih benar. Hanya isi terverifikasi yang boleh masuk agar pengetahuan tidak tercemar.",
+      "inspection_check": "Untuk artikel yang sudah terbit, periksa apakah butir pengetahuannya sudah dibuat, bersumber, dan bermasa berlaku; tandai butir pengetahuan dari artikel yang belum lolos cek fakta.",
+      "suggested_action": "Panggil vibeasik_knowledge_learn per butir terverifikasi dengan domain bidang artikel, sumber, dan masa berlaku; tautkan kunci node di catatan artikel.",
+      "severity": "medium"
+    }
+  ]
+}
