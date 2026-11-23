@@ -181,6 +181,9 @@ func printEvalReport(out io.Writer, rep *knowledge.EvalReport, domains int) {
 	fmt.Fprintf(out, "Evaluasi temu-kembali (k=%d, daftar %d, acuan %s, bagian %s, %s)\n", rep.K, rep.Limit, rep.Now.Format(time.RFC3339), split, own)
 	fmt.Fprintf(out, "Node aktif %d · todo diperingkat %d · bobot relevansi %.2f utilitas %.2f kepentingan %.2f kebaruan %.2f\n",
 		rep.Nodes, rep.Todos, w.Relevance, w.Utility, w.Importance, w.Recency)
+	if rep.Redirected > 0 {
+		fmt.Fprintf(out, "Label dialihkan dari node lebur/tergantikan ke node akhirnya: %d\n", rep.Redirected)
+	}
 	if b, err := json.Marshal(w); err == nil {
 		fmt.Fprintf(out, "Peringkat %s\n\n", b)
 	}

@@ -217,3 +217,30 @@ func TestEvalSplitOfIsStable(t *testing.T) {
 		t.Fatalf("porsi latih %d/2000, mau ±70 %%", train)
 	}
 }
+
+// Label yang menunjuk node yang kemudian dilebur dialihkan ke node kanonisnya, bukan dibuang sebagai tidak aktif.
+func TestEvaluateRedirectsMergedLabels(t *testing.T) {
+	db := evalDB(t)
+	base := time.Date(2026, 10, 1, 9, 0, 0, 0, time.Local)
+	keep := mustLearn(t, db, Note{Title: "Validasi token sesi di middleware", Content: "Periksa tanda tangan token sesi sebelum handler berjalan.", Domain: "security"})
+	dup := mustLearn(t, db, Note{Title: "Cek token sesi sebelum handler", Content: "Middleware memeriksa token sesi lebih dulu.", Domain: "security"})
+	setCreated(db, keep.ID, base)
+	setCreated(db, dup.ID, base)
+	score := 90
+	todo := models.Todo{Title: "Validasi token sesi middleware", Description: "token sesi", Status: models.TodoStatusCompleted, Score: &score,
+		Rationale: "PENGETAHUAN: K" + itoa(dup.ID)}
+	todo.CreatedAt = base.Add(24 * time.Hour)
+	if err := db.Create(&todo).Error; err != nil {
+		t.Fatal(err)
+	}
+	db.Model(&models.KnowledgeNode{}).Where("id = ?", dup.ID).Updates(map[string]interface{}{"status": models.KnowledgeNodeMerged, "merged_into_id": keep.ID})
+	invalidate()
+	rep, err := Evaluate(db, EvalOptions{K: 10, Now: time.Date(2026, 11, 1, 0, 0, 0, 0, time.Local)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	strong := rep.Tiers[0]
+	if rep.Redirected == 0 || strong.Total.Labels != 1 || strong.DroppedInactive != 0 || strong.Total.Recall != 1 {
+		t.Fatalf("label harus beralih ke node kanonis: dialihkan=%d %+v", rep.Redirected, strong)
+	}
+}

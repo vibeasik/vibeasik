@@ -130,6 +130,9 @@ type EvalReport struct {
 	Nodes   int        `json:"nodes"` // node aktif di indeks
 	Todos   int        `json:"todos"` // todo yang diperingkat (punya label di salah satu tingkat)
 	Tiers   []EvalTier `json:"tiers"`
+	// Redirected: label yang menunjuk node lebur (merged_into_id) atau tergantikan (superseded_by_id) dan dialihkan
+	// ke node akhirnya, supaya kanonisasi tidak terbaca sebagai node yang hilang.
+	Redirected int `json:"redirected"`
 }
 
 // Nama tingkat label.
@@ -273,6 +276,27 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 		created[r.ID] = r.CreatedAt
 	}
 
+	// Node lebur/tergantikan → node akhirnya (rantai diikuti, paling dalam 10 langkah).
+	redirect, err := loadRedirects(db)
+	if err != nil {
+		return nil, err
+	}
+	redirected := 0
+	final := func(id uint) uint {
+		start := id
+		for i := 0; i < 10; i++ {
+			next, ok := redirect[id]
+			if !ok || next == id {
+				break
+			}
+			id = next
+		}
+		if id != start {
+			redirected++
+		}
+		return id
+	}
+
 	// Label kuat: todo selesai yang lulus QA dan menyebut K<id>.
 	var todos []models.Todo
 	if err := db.Select("id", "title", "description", "target_apps", "category", "employee_id", "status", "score", "rationale", "created_at").
@@ -286,6 +310,9 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 			continue
 		}
 		if ids := CitedNodes(t.Rationale); len(ids) > 0 {
+			for i := range ids {
+				ids[i] = final(ids[i])
+			}
 			strong[t.ID] = ids
 		}
 	}
@@ -314,7 +341,7 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 	}
 	for _, u := range allUses {
 		if id, err := strconv.ParseUint(strings.TrimPrefix(u.Context, "todo:"), 10, 32); err == nil && id > 0 {
-			mark(uint(id), u.NodeID)
+			mark(uint(id), final(u.NodeID))
 		}
 	}
 	for todo, ids := range strong {
@@ -327,7 +354,7 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 		if err != nil || id == 0 {
 			continue
 		}
-		weak[uint(id)] = append(weak[uint(id)], u.NodeID)
+		weak[uint(id)] = append(weak[uint(id)], final(u.NodeID))
 	}
 
 	var hold *holdout
@@ -339,7 +366,7 @@ func Evaluate(db *gorm.DB, opt EvalOptions) (*EvalReport, error) {
 	}
 
 	ix := current(db)
-	rep := &EvalReport{K: opt.K, Now: opt.Now, Weights: opt.Weights, Split: opt.Split, Holdout: hold != nil, Nodes: ix.n}
+	rep := &EvalReport{K: opt.K, Now: opt.Now, Weights: opt.Weights, Split: opt.Split, Holdout: hold != nil, Nodes: ix.n, Redirected: redirected}
 	type acc struct {
 		tier            EvalTier
 		total           EvalMetrics
@@ -470,4 +497,29 @@ func averaged(m EvalMetrics) EvalMetrics {
 	m.CondNDCG, m.Unjudged, m.RecallList = r4(m.CondNDCG), r4(m.Unjudged), r4(m.RecallList)
 	m.Delivered, m.Linked = r4(m.Delivered), r4(m.Linked)
 	return m
+}
+
+// loadRedirects: node yang dilebur (status merged + merged_into_id) atau tergantikan (superseded_by_id) → penerusnya.
+func loadRedirects(db *gorm.DB) (map[uint]uint, error) {
+	var rows []struct {
+		ID           uint
+		MergedInto   *uint
+		SupersededBy *uint
+	}
+	if err := db.Model(&models.KnowledgeNode{}).
+		Select("id", "merged_into_id AS merged_into", "superseded_by_id AS superseded_by").
+		Where("(status = ? AND merged_into_id IS NOT NULL) OR superseded_by_id IS NOT NULL", models.KnowledgeNodeMerged).
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("membaca node lebur: %w", err)
+	}
+	out := make(map[uint]uint, len(rows))
+	for _, r := range rows {
+		switch {
+		case r.SupersededBy != nil && *r.SupersededBy > 0:
+			out[r.ID] = *r.SupersededBy
+		case r.MergedInto != nil && *r.MergedInto > 0:
+			out[r.ID] = *r.MergedInto
+		}
+	}
+	return out, nil
 }
