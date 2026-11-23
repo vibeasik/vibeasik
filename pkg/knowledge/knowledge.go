@@ -112,6 +112,12 @@ func Learn(db *gorm.DB, n Note) (*models.KnowledgeNode, bool, error) {
 	if err := n.normalize(); err != nil {
 		return nil, false, err
 	}
+	if sharedTrial(n) {
+		if SharedLeak(n.Title, n.Content) {
+			return nil, false, errors.New("isi seperti potongan laporan todo (baris laporan, todo bernomor, nomor baris, atau path rumah); tulis pelajaran umumnya saja")
+		}
+		n.Weight = min(n.Weight, sharedTrialWeight) // calon: bobot naik lewat bukti, bukan lewat penulisnya
+	}
 	if n.Supersedes != 0 {
 		var old models.KnowledgeNode
 		if db.Where("id = ?", n.Supersedes).Limit(1).Find(&old).Error != nil || old.ID == 0 {

@@ -22,6 +22,8 @@ import (
 //  4. pangkas node asli yang terbukti merugikan (bukti kuat saja); patokan berkas yang sering keliru ditandai perlu
 //     ditinjau. Bukti lemah (node hanya ikut hasil pekerjaan) hanya menggeser peringkat, tidak mempromosikan/memensiunkan.
 //     Node yang kedaluwarsa atau penggantinya tidak aktif lagi ditandai perlu ditinjau (validity.go).
+//     Butir bersama tulisan mesin yang 30 hari tanpa ✓, dan butir asli bersama lain yang 60 hari tak pernah dipakai,
+//     dipensiunkan (trial.go).
 //  5. hitung ulang tautan (3 tetangga terdekat) & klaster konsep
 //  6. tutup pemakaian yang tidak akan pernah dinilai sebagai netral (SettleStale)
 //  7. buang catatan pemakaian > 30 hari
@@ -40,6 +42,7 @@ type Report struct {
 	Offered  int    `json:"offered"` // tawaran pengalaman baru ke pegawai lain (adopt.go)
 	Decided  int    `json:"decided"` // masa coba adopsi yang ditutup
 	Demoted  int    `json:"demoted"` // patokan hasil promosi yang ditandai perlu ditinjau
+	Expired  int    `json:"expired"` // butir bersama yang gagal masa coba / lama menganggur (trial.go)
 	Nodes    int    `json:"nodes"`
 	Took     string `json:"took"`
 }
@@ -98,6 +101,7 @@ func Curate(db *gorm.DB) Report {
 	r.Decided = decideTrials(db, time.Now())
 	r.Promoted = promote(db)
 	r.Retired, r.Flagged = prune(db)
+	r.Expired = expireShared(db, time.Now())
 	r.Demoted = demote(db, time.Now())
 	r.Offered = offerShares(db, time.Now())
 	r.Outdated = flagOutdated(db, time.Now())
