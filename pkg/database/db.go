@@ -167,6 +167,8 @@ func schemaModels() []interface{} {
 		&models.TrafficRecentEvent{},
 		&models.TrafficErrorGroup{},
 		&models.TrafficProcess{},
+		&models.TextSource{},
+		&models.TextEntry{},
 		&SchemaStamp{},
 	}
 }

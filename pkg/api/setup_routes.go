@@ -270,6 +270,19 @@ func (s *Server) setupRoutes() {
 	api.Post("/traffic/sources/:id/sdk/install", s.installTrafficSDK)
 	api.Post("/traffic/sources/:id/todo", s.trafficRecommendationTodo)
 
+	// Teks Website: website mengirim teks yang tampil (ingest berkunci sendiri), pemilik menelusuri & menjadikannya todo.
+	api.Post("/texts/ingest", s.ingestTexts)
+	api.Get("/texts/sources", s.listTextSources)
+	api.Post("/texts/sources", s.createTextSource)
+	api.Put("/texts/sources/:id", s.updateTextSource)
+	api.Delete("/texts/sources/:id", s.deleteTextSource)
+	api.Post("/texts/sources/:id/rotate-key", s.rotateTextKey)
+	api.Get("/texts/sources/:id/sdk", s.getTextSDK)
+	api.Post("/texts/sources/:id/sdk/install", s.installTextSDK)
+	api.Get("/texts/sources/:id/facets", s.getTextFacets)
+	api.Get("/texts/sources/:id/entries", s.listTextEntries)
+	api.Post("/texts/entries/:id/todo", s.createTextEditTodo)
+
 	// REA Reverse Engineering Toolkit
 	api.Get("/rea/status", s.getReaStatus)
 	api.Post("/rea/analyze", s.runReaAnalysis)

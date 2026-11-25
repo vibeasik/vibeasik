@@ -58,6 +58,7 @@ const PROJECT_GROUPS: Record<string, string> = {
   'process-cost': 'Periksa & tingkatkan',
   'runtime-test': 'Periksa & tingkatkan',
   'traffic': 'Periksa & tingkatkan',
+  'texts': 'Periksa & tingkatkan',
   'security-test': 'Periksa & tingkatkan',
   'screenshots': 'Periksa & tingkatkan',
   'todos': 'Kerjakan perbaikan',
@@ -70,7 +71,7 @@ const PROJECT_GROUPS: Record<string, string> = {
 }
 const PROJECT_ORDER = [
   'home', 'tab:overview', 'tab:recap', 'project-docs',
-  'audit-report', 'process-cost', 'runtime-test', 'traffic', 'security-test', 'screenshots',
+  'audit-report', 'process-cost', 'runtime-test', 'traffic', 'texts', 'security-test', 'screenshots',
   'todos', 'queue', 'client-room', 'audit-learning',
   'tab:apps', 'tab:technical', 'tab:synergy', 'code-map',
   'ports', 'delivery'
@@ -179,6 +180,15 @@ export const buildProjectNavItems = (activeProjectId: number | null, activeProje
       desc: 'Trafik tinggi: rate limit, cache & skala',
       icon: 'i-lucide-activity',
       badge: 'Live',
+      exact: false
+    },
+    {
+      // Teks yang tampil di website (dikirim website ke vibeasik) → telusuri per halaman/section → todo ubah teks.
+      id: 'texts',
+      to: '/texts',
+      label: 'Teks Website',
+      desc: 'Pantau teks tampil & ubah lewat todo',
+      icon: 'i-lucide-type',
       exact: false
     },
     {

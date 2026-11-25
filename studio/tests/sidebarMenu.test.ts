@@ -14,7 +14,7 @@ describe('menu proyek aktif', () => {
   })
 
   it('Biaya Proses ada di kelompok pemeriksaan bersama audit, uji runtime & traffic', () => {
-    for (const id of ['audit-report', 'process-cost', 'runtime-test', 'traffic', 'security-test', 'screenshots']) {
+    for (const id of ['audit-report', 'process-cost', 'runtime-test', 'traffic', 'texts', 'security-test', 'screenshots']) {
       expect(groupOf(id)).toBe('Periksa & tingkatkan')
     }
     expect(groupOf('tab:overview')).toBe('Ringkasan')

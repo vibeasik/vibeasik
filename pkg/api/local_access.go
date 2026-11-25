@@ -14,7 +14,7 @@ import (
 // Akses lokal engine (lapisan pertama, sebelum exec guard):
 //   - Host harus localhost / IP loopback (atau IP LAN bila engine sengaja dibuka ke LAN) — menolak DNS rebinding.
 //   - Setiap request API, MCP, dan halaman Studio wajib membawa token lokal (header, Bearer, atau cookie Studio).
-//     Pengecualian: /health, /api/traffic/ingest (berkunci sendiri per sumber), dan aset statis Studio.
+//     Pengecualian: /health, /api/traffic/ingest dan /api/texts/ingest (berkunci sendiri per sumber), dan aset statis Studio.
 //   - Studio mendapat cookie lewat /auth?t=<token> (tautan dari `vibeasik serve` / `vibeasik open`).
 
 // SetLAN menandai engine dibuka ke jaringan lokal (bind bukan loopback): Host berupa IP LAN diterima.
@@ -89,7 +89,7 @@ func (s *Server) localAccess(c *fiber.Ctx) error {
 		})
 	}
 	p := c.Path()
-	if c.Method() == fiber.MethodOptions || p == "/health" || p == "/api/traffic/ingest" {
+	if c.Method() == fiber.MethodOptions || p == "/health" || p == "/api/traffic/ingest" || p == "/api/texts/ingest" {
 		return c.Next()
 	}
 	if p == "/auth" {
